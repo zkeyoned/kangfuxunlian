@@ -1,0 +1,120 @@
+{
+  "_note": "演示数据，人物全部虚构。密码只用于本机演示，部署前必须改。",
+  "institutions": [
+    {"key": "demo", "name": "演示康复中心"}
+  ],
+  "users": [
+    {"institution": "demo", "role": "admin",     "username": "admin",   "password": "admin123", "display_name": "系统管理员"},
+    {"institution": "demo", "role": "therapist", "username": "dr.lin",  "password": "lin123",   "display_name": "林康复师"},
+    {"institution": "demo", "role": "patient",   "username": "p.zhang", "password": "zhang123", "display_name": "张先生"},
+    {"institution": "demo", "role": "patient",   "username": "p.wu",    "password": "wu123",    "display_name": "吴女士"}
+  ],
+  "exercises": [
+    {"code": "SLR",       "name": "直腿抬高", "joint": "髋/膝", "metric": "hip_angle",  "direction": "up",   "camera_side": "side",  "description": "仰卧，患侧膝伸直抬腿至目标角度，停留后缓慢放下。关键指标：髋屈曲角、膝伸直度。"},
+    {"code": "KNEE_FLEX", "name": "屈膝训练", "joint": "膝",    "metric": "knee_angle", "direction": "down", "camera_side": "side",  "description": "坐位或俯卧，患侧膝屈曲至最大可耐受角度再伸直。关键指标：膝屈曲峰值。"},
+    {"code": "SQUAT",     "name": "深蹲",     "joint": "膝/髋", "metric": "knee_angle", "direction": "down", "camera_side": "side",  "description": "双脚与肩同宽下蹲至目标深度后站起。关键指标：膝角、髋角、躯干前倾。"},
+    {"code": "STS",       "name": "坐站训练", "joint": "膝/髋", "metric": "knee_angle", "direction": "up",   "camera_side": "side",  "description": "从椅子上不借助手臂站起再坐下。关键指标：膝伸展、完成时间。"}
+  ],
+  "rule_versions": [
+    {"exercise_code": "SQUAT", "version": "v0.1", "active": true,
+     "author": "后端与视觉算法（常）", "reviewer": "康复需求与医学沟通（陈）",
+     "rationale": "初始假设值：术后中期常见目标膝屈曲 60-90°；躯干前倾阈值 30° 取自常见深蹲评估经验。**均需康复专业人员审核后替换。**",
+     "params": {
+       "metric": "knee_angle", "direction": "down",
+       "rest_angle": 165, "start_threshold": 150, "target_angle": 90, "min_valid_angle": 110,
+       "hold_ms": 300, "min_rep_ms": 1200, "max_rep_ms": 8000,
+       "trunk_lean_max_deg": 30, "knee_valgus_ratio_max": 0.15,
+       "smoothing_window": 5, "min_visibility": 0.6,
+       "score_weights": {"completion": 0.30, "amplitude": 0.25, "posture": 0.25, "tempo": 0.10, "stability": 0.10}
+     }},
+    {"exercise_code": "KNEE_FLEX", "version": "v0.1", "active": true,
+     "author": "后端与视觉算法（常）", "reviewer": "康复需求与医学沟通（陈）",
+     "rationale": "初始假设值，待审核。",
+     "params": {
+       "metric": "knee_angle", "direction": "down",
+       "rest_angle": 170, "start_threshold": 155, "target_angle": 100, "min_valid_angle": 120,
+       "hold_ms": 500, "min_rep_ms": 1500, "max_rep_ms": 10000,
+       "hip_shift_max": 0.1, "smoothing_window": 5, "min_visibility": 0.6,
+       "score_weights": {"completion": 0.30, "amplitude": 0.25, "posture": 0.25, "tempo": 0.10, "stability": 0.10}
+     }},
+    {"exercise_code": "SLR", "version": "v0.1", "active": true,
+     "author": "后端与视觉算法（常）", "reviewer": "康复需求与医学沟通（陈）",
+     "rationale": "初始假设值，待审核。",
+     "params": {
+       "metric": "hip_angle", "direction": "up",
+       "rest_angle": 5, "start_threshold": 15, "target_angle": 45, "min_valid_angle": 30,
+       "hold_ms": 1000, "min_rep_ms": 2000, "max_rep_ms": 10000,
+       "knee_straight_min_deg": 165, "smoothing_window": 5, "min_visibility": 0.6,
+       "score_weights": {"completion": 0.30, "amplitude": 0.25, "posture": 0.25, "tempo": 0.10, "stability": 0.10}
+     }},
+    {"exercise_code": "STS", "version": "v0.1", "active": true,
+     "author": "后端与视觉算法（常）", "reviewer": "康复需求与医学沟通（陈）",
+     "rationale": "初始假设值，待审核。",
+     "params": {
+       "metric": "knee_angle", "direction": "up",
+       "rest_angle": 90, "start_threshold": 105, "target_angle": 170, "min_valid_angle": 160,
+       "hold_ms": 300, "min_rep_ms": 1000, "max_rep_ms": 8000,
+       "arm_assist_check": true, "smoothing_window": 5, "min_visibility": 0.6,
+       "score_weights": {"completion": 0.30, "amplitude": 0.25, "posture": 0.25, "tempo": 0.10, "stability": 0.10}
+     }}
+  ],
+  "patients": [
+    {"username": "p.zhang", "institution": "demo", "therapist": "dr.lin",
+     "surgery_type": "ACL 重建（右）", "surgery_date": "2026-07-28", "affected_side": "R", "phase": "术后 6 周，中期",
+     "baseline": {"knee_flex_max": 82, "knee_ext_deficit": 6, "note": "基线由康复师 8/25 门诊测量"},
+     "notes": "上下楼梯仍有不稳感，训练时注意膝内扣。"},
+    {"username": "p.wu", "institution": "demo", "therapist": "dr.lin",
+     "surgery_type": "全膝关节置换（左）", "surgery_date": "2026-08-10", "affected_side": "L", "phase": "术后 4 周，早期",
+     "baseline": {"knee_flex_max": 70, "knee_ext_deficit": 10, "note": "基线 9/1 复诊测量"},
+     "notes": "疼痛耐受较低，每组间隔可延长。"}
+  ],
+  "plans": [
+    {"patient": "p.zhang", "therapist": "dr.lin", "title": "术后 6-8 周计划", "start_date": "2026-09-01", "end_date": "2026-09-21", "days_per_week": 5,
+     "goal_text": "本周膝屈曲峰值达到 100°，深蹲无明显膝内扣",
+     "items": [
+       {"exercise_code": "SLR",       "sets": 3, "reps": 10, "target_angle": 45,  "min_valid_angle": 30,  "rest_sec": 45},
+       {"exercise_code": "KNEE_FLEX", "sets": 3, "reps": 10, "target_angle": 100, "min_valid_angle": 120, "rest_sec": 60},
+       {"exercise_code": "SQUAT",     "sets": 2, "reps": 8,  "target_angle": 90,  "min_valid_angle": 110, "rest_sec": 90, "notes": "扶墙可，不加负重"},
+       {"exercise_code": "STS",       "sets": 2, "reps": 8,  "target_angle": 170, "min_valid_angle": 160, "rest_sec": 60}
+     ]},
+    {"patient": "p.wu", "therapist": "dr.lin", "title": "术后 4-6 周计划", "start_date": "2026-09-03", "end_date": "2026-09-17", "days_per_week": 6,
+     "goal_text": "膝屈曲达到 90°，直腿抬高能稳定保持 3 秒",
+     "items": [
+       {"exercise_code": "SLR",       "sets": 3, "reps": 8,  "target_angle": 40, "min_valid_angle": 25, "rest_sec": 60},
+       {"exercise_code": "KNEE_FLEX", "sets": 3, "reps": 8,  "target_angle": 90, "min_valid_angle": 120, "rest_sec": 90}
+     ]}
+  ],
+  "history": [
+    {"patient": "p.zhang", "date": "2026-09-01", "pain": 3, "items": [
+      {"exercise_code": "KNEE_FLEX", "reps_done": 10, "reps_valid": 7, "peak_angle_max": 84, "quality_score": 66, "compensation_count": 2, "breakdown": {"completion": 21, "amplitude": 15, "posture": 18, "tempo": 6, "stability": 6}},
+      {"exercise_code": "SQUAT", "reps_target": 8, "reps_done": 8, "reps_valid": 5, "peak_angle_max": 118, "quality_score": 61, "compensation_count": 3, "breakdown": {"completion": 19, "amplitude": 12, "posture": 17, "tempo": 7, "stability": 6}}
+    ]},
+    {"patient": "p.zhang", "date": "2026-09-02", "pain": 3, "items": [
+      {"exercise_code": "KNEE_FLEX", "reps_done": 10, "reps_valid": 8, "peak_angle_max": 86, "quality_score": 70, "compensation_count": 2, "breakdown": {"completion": 24, "amplitude": 16, "posture": 18, "tempo": 6, "stability": 6}},
+      {"exercise_code": "SQUAT", "reps_target": 8, "reps_done": 8, "reps_valid": 6, "peak_angle_max": 114, "quality_score": 65, "compensation_count": 2, "breakdown": {"completion": 22, "amplitude": 13, "posture": 18, "tempo": 6, "stability": 6}}
+    ]},
+    {"patient": "p.zhang", "date": "2026-09-03", "pain": 2, "items": [
+      {"exercise_code": "KNEE_FLEX", "reps_done": 10, "reps_valid": 9, "peak_angle_max": 89, "quality_score": 74, "compensation_count": 1, "breakdown": {"completion": 27, "amplitude": 17, "posture": 19, "tempo": 6, "stability": 5}}
+    ]},
+    {"patient": "p.zhang", "date": "2026-09-05", "pain": 2, "items": [
+      {"exercise_code": "KNEE_FLEX", "reps_done": 10, "reps_valid": 9, "peak_angle_max": 91, "quality_score": 76, "compensation_count": 1, "breakdown": {"completion": 27, "amplitude": 18, "posture": 19, "tempo": 6, "stability": 6}},
+      {"exercise_code": "SQUAT", "reps_target": 8, "reps_done": 8, "reps_valid": 7, "peak_angle_max": 108, "quality_score": 72, "compensation_count": 1, "breakdown": {"completion": 26, "amplitude": 15, "posture": 19, "tempo": 6, "stability": 6}}
+    ]},
+    {"patient": "p.zhang", "date": "2026-09-06", "pain": 2, "items": [
+      {"exercise_code": "KNEE_FLEX", "reps_done": 10, "reps_valid": 10, "peak_angle_max": 94, "quality_score": 80, "compensation_count": 0, "breakdown": {"completion": 30, "amplitude": 19, "posture": 20, "tempo": 6, "stability": 5}},
+      {"exercise_code": "SLR", "reps_done": 10, "reps_valid": 9, "peak_angle_max": 42, "quality_score": 78, "compensation_count": 1, "breakdown": {"completion": 27, "amplitude": 20, "posture": 18, "tempo": 7, "stability": 6}}
+    ]},
+    {"patient": "p.zhang", "date": "2026-09-07", "pain": 1, "items": [
+      {"exercise_code": "KNEE_FLEX", "reps_done": 10, "reps_valid": 10, "peak_angle_max": 96, "quality_score": 82, "compensation_count": 0, "breakdown": {"completion": 30, "amplitude": 20, "posture": 20, "tempo": 6, "stability": 6}},
+      {"exercise_code": "SQUAT", "reps_target": 8, "reps_done": 8, "reps_valid": 8, "peak_angle_max": 102, "quality_score": 79, "compensation_count": 1, "breakdown": {"completion": 30, "amplitude": 17, "posture": 19, "tempo": 7, "stability": 6}},
+      {"exercise_code": "STS", "reps_target": 8, "reps_done": 8, "reps_valid": 7, "peak_angle_max": 168, "quality_score": 75, "compensation_count": 1, "breakdown": {"completion": 26, "amplitude": 19, "posture": 17, "tempo": 7, "stability": 6}}
+    ]},
+    {"patient": "p.wu", "date": "2026-09-03", "pain": 5, "items": [
+      {"exercise_code": "KNEE_FLEX", "reps_target": 8, "reps_done": 8, "reps_valid": 4, "peak_angle_max": 72, "quality_score": 52, "compensation_count": 3, "breakdown": {"completion": 15, "amplitude": 10, "posture": 15, "tempo": 6, "stability": 6}}
+    ]},
+    {"patient": "p.wu", "date": "2026-09-04", "pain": 4, "items": [
+      {"exercise_code": "KNEE_FLEX", "reps_target": 8, "reps_done": 8, "reps_valid": 5, "peak_angle_max": 75, "quality_score": 58, "compensation_count": 2, "breakdown": {"completion": 19, "amplitude": 12, "posture": 16, "tempo": 6, "stability": 5}},
+      {"exercise_code": "SLR", "reps_target": 8, "reps_done": 8, "reps_valid": 6, "peak_angle_max": 33, "quality_score": 64, "compensation_count": 2, "breakdown": {"completion": 22, "amplitude": 14, "posture": 16, "tempo": 6, "stability": 6}}
+    ]}
+  ]
+}

@@ -1,0 +1,43 @@
+name: tests
+
+on:
+  push:
+    branches: [main]
+  pull_request:
+    branches: [main]
+
+jobs:
+  api-tests:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+
+      - name: 安装 Python
+        uses: actions/setup-python@v5
+        with:
+          python-version: "3.11"
+
+      - name: 安装依赖
+        run: pip3 install -r requirements.txt
+
+      - name: 后台启动（走 start.sh，覆盖依赖检查/端口检查/健康等待）
+        run: |
+          nohup ./start.sh 8801 > start.out 2>&1 &
+          for i in $(seq 1 40); do
+            curl -s -m 1 http://127.0.0.1:8801/healthz && break
+            sleep 0.25
+          done
+
+      - name: 检查健康检查接口
+        run: curl -sf http://127.0.0.1:8801/healthz
+
+      - name: 运行接口测试
+        run: python3 tests/test_api.py
+
+      - name: 失败时打印 start.sh 输出
+        if: failure()
+        run: cat start.out || true
+
+      - name: 失败时打印服务日志
+        if: failure()
+        run: cat data/logs/server.out || true

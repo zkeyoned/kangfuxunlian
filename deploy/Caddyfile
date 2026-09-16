@@ -1,0 +1,16 @@
+# 反向代理 + 自动 HTTPS（Let's Encrypt）。DOMAIN_PLACEHOLDER 就是 <你的域名>，
+# install.sh 会自动把它替换成你执行脚本时传入的域名；手动使用时也把它换成 <你的域名>。
+# 为什么必须 HTTPS：浏览器只在 https:// 或 localhost 下允许打开摄像头（getUserMedia）。
+DOMAIN_PLACEHOLDER {
+    encode gzip
+    reverse_proxy 127.0.0.1:8801
+    log {
+        output file /var/log/caddy/rehab.access.log
+    }
+    header {
+        Strict-Transport-Security "max-age=31536000"
+        X-Content-Type-Options "nosniff"
+        Referrer-Policy "no-referrer"
+        Permissions-Policy "camera=(self)"
+    }
+}

@@ -1,0 +1,22 @@
+# systemd 单元：/etc/systemd/system/rehabtrack.service
+# 启用：sudo systemctl daemon-reload && sudo systemctl enable --now rehabtrack
+[Unit]
+Description=RehabTrack API
+After=network.target
+
+[Service]
+User=rehab
+WorkingDirectory=/opt/rehabtrack
+Environment=REHAB_DATA_DIR=/var/lib/rehabtrack
+Environment=REHAB_BIND=127.0.0.1
+ExecStart=/opt/rehabtrack/.venv/bin/python backend/main.py 8801
+Restart=always
+RestartSec=3
+# 最小权限
+NoNewPrivileges=true
+PrivateTmp=true
+ProtectSystem=strict
+ReadWritePaths=/var/lib/rehabtrack
+
+[Install]
+WantedBy=multi-user.target
