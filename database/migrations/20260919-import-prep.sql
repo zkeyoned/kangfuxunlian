@@ -33,3 +33,7 @@ ALTER TABLE reps ADD COLUMN needs_review INTEGER NOT NULL DEFAULT 0;
 -- 幂等索引，跑几次都没事（也已经在 schema.sql 里，新建库会自动有）。
 CREATE UNIQUE INDEX IF NOT EXISTS idx_sessions_import_source_key
   ON sessions(import_source_key) WHERE import_source_key IS NOT NULL;
+
+-- 注：20260919 同一批加的 session_events 表是全新的一张表，不是给已有表加列，
+-- CREATE TABLE IF NOT EXISTS 天然幂等，已经留在 schema.sql 里跟着每次 init_db() 自动建，
+-- 不需要写进这个迁移文件。

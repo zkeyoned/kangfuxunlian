@@ -113,10 +113,17 @@ class TestImportResults(unittest.TestCase):
         self.assertEqual(item["reps_done"], 1)
         self.assertEqual(item["reps_valid"], 1, "样例唯一一次动作 amplitude_met=true 且没有 too_fast 事件")
         self.assertAlmostEqual(item["peak_angle_max"], 170.0)
-        self.assertGreaterEqual(item["quality_score"], 0)
-        self.assertLessEqual(item["quality_score"], 100)
+
+        # 20260919 常的要求：默认（--score-mode 不传）quality_score 留 NULL，
+        # 不能拿提示事件条数反推一个分数出来。
+        self.assertIsNone(item["quality_score"])
         breakdown = json.loads(item["score_breakdown_json"])
-        self.assertAlmostEqual(sum(breakdown.values()), item["quality_score"], places=2)
+        self.assertTrue(breakdown["provisional"])
+        self.assertIn("reason", breakdown)
+        self.assertEqual(breakdown["reps_valid"], 1)
+        self.assertEqual(breakdown["reps_target"], 1)
+        self.assertIn("compensation_event_count", breakdown)
+        self.assertIn("too_fast_event_count", breakdown)
 
         reps = con.execute(
             "SELECT * FROM reps WHERE session_item_id=?", (item["id"],)
@@ -126,6 +133,32 @@ class TestImportResults(unittest.TestCase):
         self.assertAlmostEqual(reps[0]["peak_angle"], 170.0)
         self.assertEqual(reps[0]["duration_ms"], 3700)  # (4.4-0.7)s 的样例数据
 
+        # 样例（老格式）summary.json 没有 feedback_events，session_events 应该是空的，
+        # 但表本身要能查（新表跟着 schema.sql 自动建）。
+        events = con.execute(
+            "SELECT * FROM session_events WHERE session_item_id=?", (item["id"],)
+        ).fetchall()
+        self.assertEqual(len(events), 0)
+
+        con.close()
+
+    def test_score_mode_contract_d_computes_quality_score(self):
+        session_id = ir.import_run(
+            self.run_dir, patient_id=1, plan_id=None, plan_item_id=None,
+            db_path=self.db_path, dry_run=False, score_mode="contract-d",
+        )
+        con = self._connect()
+        item = con.execute(
+            "SELECT * FROM session_items WHERE session_id=?", (session_id,)
+        ).fetchone()
+        self.assertIsNotNone(item["quality_score"])
+        self.assertGreaterEqual(item["quality_score"], 0)
+        self.assertLessEqual(item["quality_score"], 100)
+        breakdown = json.loads(item["score_breakdown_json"])
+        self.assertEqual(breakdown["score_mode"], "contract-d")
+        self.assertNotIn("provisional", breakdown)
+        points = sum(v for k, v in breakdown.items() if k != "score_mode")
+        self.assertAlmostEqual(points, item["quality_score"], places=2)
         con.close()
 
     def test_reimport_is_idempotent(self):
@@ -150,6 +183,59 @@ class TestImportResults(unittest.TestCase):
                 self.run_dir, patient_id=999, plan_id=None, plan_item_id=None,
                 db_path=self.db_path, dry_run=False,
             )
+
+
+class TestSessionEvents(unittest.TestCase):
+    """assign_events_to_groups / build_session_events 的单元测试，不依赖原型样例文件，
+    main 分支上也能跑（不像上面那组测试要等 PR #1 合并）。"""
+
+    def test_events_assigned_to_matching_group_and_rep(self):
+        groups = {
+            1: [{"index": 1, "start_s": 1.0, "end_s": 4.0, "rep_in_set": 1}],
+            2: [{"index": 2, "start_s": 10.0, "end_s": 13.0, "rep_in_set": 1}],
+        }
+        events = [
+            {"code": "KNEE_TOO_FAST", "message": "太快", "timestamp_s": 3.0, "level": "notice"},
+            {"code": "TRUNK_FORWARD", "message": "前倾", "timestamp_s": 11.5, "level": "notice"},
+            {"code": "SOMETHING", "message": "组间休息期间的提示", "timestamp_s": 6.0, "level": "notice"},
+        ]
+        assigned = ir.assign_events_to_groups(events, groups)
+        self.assertEqual(len(assigned[1]), 2, "第一条落在组1窗内；第三条（t=6）离组1右边界更近，也归组1")
+        self.assertEqual(len(assigned[2]), 1)
+
+        rows_g1 = ir.build_session_events(assigned[1], groups[1])
+        by_code = {r["code"]: r for r in rows_g1}
+        self.assertEqual(by_code["KNEE_TOO_FAST"]["rep_index"], 1)
+        self.assertIsNone(by_code["SOMETHING"]["rep_index"], "t=6 不落在任何 rep 窗口内，rep_index 应为空")
+        self.assertEqual(json.loads(by_code["KNEE_TOO_FAST"]["raw_json"])["message"], "太快")
+
+    def test_event_own_rep_index_wins_over_time_window(self):
+        """原型的 AMPLITUDE_BELOW_TARGET / HOLD_TOO_SHORT / RETURN_TOO_FAST 是在这一次动作判定
+        完成的那一帧才发出的，时间戳一定晚于该次 rep 的 end_s（end_s 取回到静息位的时刻）。
+        所以必须优先认事件自带的 rep_index（原型全局序号），并换算成落库用的组内序号。"""
+        groups = {
+            1: [{"index": 1, "start_s": 1.0, "end_s": 4.0, "rep_in_set": 1}],
+            2: [{"index": 2, "start_s": 10.0, "end_s": 13.0, "rep_in_set": 1}],
+        }
+        # t=13.6 落在所有 rep 窗口之外，但事件自带 rep_index=2（原型全局第 2 次动作，属于第 2 组）
+        events = [{"code": "HOLD_TOO_SHORT", "message": "保持不足", "timestamp_s": 13.6,
+                   "level": "notice", "rep_index": 2}]
+        assigned = ir.assign_events_to_groups(events, groups)
+        self.assertEqual(len(assigned[2]), 1, "自带 rep_index=2 的事件应归第 2 组，不看时间戳")
+        self.assertEqual(assigned[1], [])
+        rows = ir.build_session_events(assigned[2], groups[2])
+        self.assertEqual(rows[0]["rep_index"], 1, "全局第 2 次动作在第 2 组里是组内第 1 次")
+
+    def test_event_rep_index_not_in_this_group_falls_back_to_time(self):
+        """事件自带的序号在本组 reps 里找不到时（不该发生，兜底），退回按时间窗判。"""
+        reps = [{"index": 7, "start_s": 1.0, "end_s": 4.0, "rep_in_set": 3}]
+        rows = ir.build_session_events(
+            [{"code": "TRUNK_FORWARD", "timestamp_s": 2.0, "level": "notice", "rep_index": 99}], reps
+        )
+        self.assertEqual(rows[0]["rep_index"], 3)
+
+    def test_no_groups_means_no_events_assigned(self):
+        self.assertEqual(ir.assign_events_to_groups([{"timestamp_s": 1.0, "code": "X"}], {}), {})
 
 
 if __name__ == "__main__":

@@ -131,9 +131,9 @@ CREATE TABLE IF NOT EXISTS session_items (
   peak_angle_max      REAL,
   peak_angle_mean     REAL,
   duration_ms         INTEGER,
-  quality_score       REAL,                    -- 0-100，按规则计算（含 5 个维度）
-  score_breakdown_json TEXT,                   -- {"completion":30,"amplitude":22,...}
-  compensation_count  INTEGER NOT NULL DEFAULT 0,
+  quality_score       REAL,                    -- 0-100，按规则计算（含 5 个维度）。离线导入（database/import_results.py）默认不写这一列（NULL），只有显式传 --score-mode contract-d 才按契约 D 节现算，原因见 docs/02-数据字典.md
+  score_breakdown_json TEXT,                   -- {"completion":30,"amplitude":22,...}。离线导入默认存的是各维度原始输入（非加权得分）并标 provisional，见 docs/02
+  compensation_count  INTEGER NOT NULL DEFAULT 0,  -- 提示事件计数（非代偿类 flag 的触发次数），不是"确诊代偿次数"；提示有冷却时间，条数不等于问题严重程度，离线导入时不用它反推评分
   capture_quality     REAL,                    -- 0-1，关键点可用帧率
   low_confidence      INTEGER NOT NULL DEFAULT 0,  -- 1=这组测不准，不给强提示
   angle_trace_json    TEXT,                    -- 可选：降采样角度序列（每 100ms 一个点）
@@ -158,6 +158,24 @@ CREATE TABLE IF NOT EXISTS reps (
   bridged_gaps     INTEGER NOT NULL DEFAULT 0,  -- 离线导入：这次动作用了几次短暂预测补帧
   needs_review     INTEGER NOT NULL DEFAULT 0   -- 离线导入：bridged_gaps>0 时为 1，提示这条数据不完全是直接观测
 );
+
+-- 逐条提示事件（20260919 新增）。这是原型的 feedback_events 逐时刻纠错记录，不能用下面的
+-- alerts 表代替：alerts 是给康复师看的汇总提醒（一条 session 一类问题一条），这里是每一次
+-- "身体前倾""速度过快"这类实时提示原样落库，一条事件一行，供以后做回放、按事件类型统计用。
+-- 离线导入：database/import_results.py 把 summary.feedback_events 逐条写进来，rep_index
+-- 优先用事件自带的序号换算成组内序号，事件没带才按时间戳落在哪个 rep 的 [start_s,end_s]
+-- 窗口内回填，两样都对不上时为空。
+CREATE TABLE IF NOT EXISTS session_events (
+  id               INTEGER PRIMARY KEY AUTOINCREMENT,
+  session_item_id  INTEGER NOT NULL REFERENCES session_items(id) ON DELETE CASCADE,
+  rep_index        INTEGER,                    -- 这条提示属于哪一次动作（对齐 reps.rep_index，即组内序号），判不出时为空
+  timestamp_s      REAL,                       -- 原型的相对时间戳（run.py 里的 t），不是墙钟时间
+  code             TEXT,                       -- 原型事件代号，如 TRUNK_FORWARD / KNEE_TOO_FAST，原样存，不翻译成契约 flags 枚举
+  message          TEXT,                       -- 原型给用户看的提示文案，原样存
+  severity         TEXT,                       -- 原型 level 字段原样存（目前原型只有 'notice'），不是 alerts.severity 那个三态枚举
+  raw_json         TEXT                        -- 整条原始事件 JSON，字段有出入时兜底
+);
+CREATE INDEX IF NOT EXISTS idx_session_events_item ON session_events(session_item_id);
 
 -- 异常提醒：给康复师看的队列。
 CREATE TABLE IF NOT EXISTS alerts (

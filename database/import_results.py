@@ -7,7 +7,8 @@
 
 用法：
     python3 database/import_results.py <results目录> --patient-id 1 \\
-        [--plan-id 1] [--plan-item-id 1] [--db data/rehabtrack.sqlite3] [--dry-run]
+        [--plan-id 1] [--plan-item-id 1] [--db data/rehabtrack.sqlite3] [--dry-run] \\
+        [--score-mode none|contract-d]
 
 <results目录> 是原型 rehab_pose.run 每次运行产出的那个目录（如 results/20260918_231045_123456/），
 必须包含 summary.json 和 frames.jsonl；assessment.json 可选，缺失时只是少落一列 checks_json。
@@ -17,10 +18,15 @@
 幂等：用 summary.json 的 created_utc（缺失时退化成目录名）作为 sessions.import_source_key，
 重复导入同一个目录会直接跳过，不会插入第二条 session。
 
-动作代号映射、reps_valid 判定口径、评分口径等，均已由队友「常」拍板，规则写在下面
-CROSSWALK / TOO_FAST_CODES / COMPENSATION_FLAG 几个常量和各函数的注释里，不要在这个脚本里
-再擅自改动动作代号或角度口径的假设——如果发现原型输出和这里的假设对不上，去
-docs/decisions/ 记一条，别悄悄改这个脚本让它"能跑就行"。
+动作代号映射、reps_valid 判定口径已由队友「常」拍板，规则写在下面 CROSSWALK / TOO_FAST_CODES /
+COMPENSATION_FLAG 几个常量和各函数的注释里，不要在这个脚本里再擅自改动动作代号或角度口径的假设
+——如果发现原型输出和这里的假设对不上，去 docs/decisions/ 记一条，别悄悄改这个脚本让它"能跑就行"。
+
+评分口径**还没定**（20260919 常明确提出：提示有冷却时间，识别不到不等于动作正确，条数不能直接
+拿来扣分）：默认 --score-mode none，quality_score 留 NULL，score_breakdown_json 只存原始输入并
+标 provisional；--score-mode contract-d 才按接口契约 D 节公式现算，仅供联调对比，不代表这个公式
+已经拍板。原型的逐条提示事件（feedback_events）原样落进新表 session_events，供以后回放或做别的
+判定逻辑用，不因为这次不拿它算分就丢掉。
 """
 from __future__ import annotations
 
@@ -330,8 +336,36 @@ def clamp01(x):
     return max(0.0, min(1.0, x))
 
 
-def compute_score(*, reps_valid, reps_target, reps_done, peak_angle_max, rest_angle, target_angle,
-                   compensation_count, too_fast_count, capture_quality, score_weights):
+def compute_provisional_breakdown(*, reps_valid, reps_target, reps_done, peak_angle_max, rest_angle,
+                                   target_angle, compensation_count, too_fast_count, capture_quality):
+    """默认（--score-mode 不传，即 'none'）的 score_breakdown_json：只存各维度的原始输入，
+    不折算成 0-100 分，quality_score 这一列对应留 NULL。
+
+    这是队友（常）20260919 的硬要求：提示事件有冷却时间（同一秒钟前倾了 5 次也只算一次提示），
+    识别不到（低置信度、遮挡）也不等于动作做对了，"保持不足"/"无法判断"这类状态到底该不该扣分、
+    扣多少，还没和 陈（临床）共同定下来，数据库层不该在没有这个公式之前，自己拿事件条数当扣分
+    依据编一个分数出来给人看。真要对比契约 D 节公式，用 --score-mode contract-d 显式打开。
+    """
+    if peak_angle_max is not None and rest_angle is not None and target_angle is not None and target_angle != rest_angle:
+        amplitude_ratio = round(abs(peak_angle_max - rest_angle) / abs(target_angle - rest_angle), 4)
+    else:
+        amplitude_ratio = None
+    return {
+        "reps_valid": reps_valid, "reps_target": reps_target, "reps_done": reps_done,
+        "amplitude_ratio": amplitude_ratio,
+        "compensation_event_count": compensation_count,
+        "too_fast_event_count": too_fast_count,
+        "capture_quality": capture_quality,
+        "provisional": True,
+        "reason": "评分口径待常/陈确认：提示有冷却时间、识别不到不等于动作正确，"
+                  "保持不足/无法判断如何处理仍需共同确定，见 docs/decisions/0002",
+    }
+
+
+def compute_contract_d_score(*, reps_valid, reps_target, reps_done, peak_angle_max, rest_angle, target_angle,
+                              compensation_count, too_fast_count, capture_quality, score_weights):
+    """只在 --score-mode contract-d 显式打开时才调用，按接口契约 D 节公式现算，供联调对比用，
+    不是默认行为（见 compute_provisional_breakdown 的说明）。"""
     completion = clamp01(reps_valid / reps_target) if reps_target else 0.0
     if peak_angle_max is not None and rest_angle is not None and target_angle is not None and target_angle != rest_angle:
         amplitude = clamp01(abs(peak_angle_max - rest_angle) / abs(target_angle - rest_angle))
@@ -342,8 +376,90 @@ def compute_score(*, reps_valid, reps_target, reps_done, peak_angle_max, rest_an
     stability = clamp01(capture_quality) if capture_quality is not None else 0.0
     dims = {"completion": completion, "amplitude": amplitude, "posture": posture, "tempo": tempo, "stability": stability}
     breakdown = {k: round(100 * score_weights.get(k, DEFAULT_SCORE_WEIGHTS[k]) * v, 2) for k, v in dims.items()}
-    quality_score = round(sum(breakdown.values()), 2)
+    breakdown["score_mode"] = "contract-d"
+    quality_score = round(sum(v for k, v in breakdown.items() if k != "score_mode"), 2)
     return quality_score, breakdown
+
+
+# ---------------------------------------------------------------------------
+# 逐条提示事件（session_events）：原样落库，不用于评分
+# ---------------------------------------------------------------------------
+
+def _event_distance(t, extent):
+    start, end = extent
+    if t is None:
+        return 0.0
+    if start <= t <= end:
+        return 0.0
+    return start - t if t < start else t - end
+
+
+def _stored_rep_index(rep: dict):
+    """reps.rep_index 落库时存的是组内序号 rep_in_set（原型没分组时退化成全局 index）。
+    session_events.rep_index 必须跟这一列对齐，不能直接存原型的全局 index。"""
+    return rep.get("rep_in_set", rep.get("index"))
+
+
+def assign_events_to_groups(feedback_events: list, groups: dict):
+    """把 summary.feedback_events 分配给各个 training_set 分组（session_items 的粒度）。
+    事件自带 rep_index（原型全局序号）时直接归那一次动作所在的组；没有就按时间戳判：
+    每组的时间窗是该组内各 rep 的 [start_s,end_s] 并集的外包络，事件落在某组窗内就归那组，
+    落在组间空档（如组间休息）就近归给外包络边界最近的组，tie 时归 set_index 较小的组。
+    没有任何一组（reps 全部被中断、没有 repetitions）时返回空字典，事件不落库
+    （session_events 需要 session_item_id，没有 session_item 就没地方挂）。"""
+    if not groups:
+        return {}
+    extents = {}
+    index_to_group = {}
+    for set_index, reps in groups.items():
+        extents[set_index] = (min(r["start_s"] for r in reps), max(r["end_s"] for r in reps))
+        for rep in reps:
+            if rep.get("index") is not None:
+                index_to_group[rep["index"]] = set_index
+    assigned = {set_index: [] for set_index in groups}
+    for event in feedback_events:
+        own = event.get("rep_index")
+        if own is not None and own in index_to_group:
+            assigned[index_to_group[own]].append(event)
+            continue
+        t = event.get("timestamp_s")
+        best = min(extents, key=lambda k: (_event_distance(t, extents[k]), k))
+        assigned[best].append(event)
+    return assigned
+
+
+def build_session_events(events: list, reps: list):
+    """回填 rep_index：优先用事件自带的 rep_index（原型全局序号，换算成落库用的组内序号），
+    没带才按时间戳落在哪个 rep 的 [start_s,end_s] 窗内判，两样都对不上就留空。
+
+    为什么优先用事件自带的：原型里 AMPLITUDE_BELOW_TARGET / HOLD_TOO_SHORT / RETURN_TOO_FAST
+    这三类"这一次动作没达标"的事件，是在这一次动作被判定完成的那一帧才发出的，而 rep 的 end_s
+    取的是小腿回到静息位的时刻，比那一帧早至少一个 rest_dwell_s，所以这三类事件的时间戳必然落在
+    所有 rep 窗口之外。只按时间窗回填，最该有 rep_index 的这三类事件反而会全部落空。
+    原始事件整条存进 raw_json，不丢字段。
+    """
+    by_global_index = {rep["index"]: rep for rep in reps if rep.get("index") is not None}
+    rows = []
+    for event in events:
+        t = event.get("timestamp_s")
+        rep_index = None
+        own_index = event.get("rep_index")
+        if own_index is not None and own_index in by_global_index:
+            rep_index = _stored_rep_index(by_global_index[own_index])
+        elif t is not None:
+            for rep in reps:
+                if rep["start_s"] <= t <= rep["end_s"]:
+                    rep_index = _stored_rep_index(rep)
+                    break
+        rows.append({
+            "rep_index": rep_index,
+            "timestamp_s": t,
+            "code": event.get("code"),
+            "message": event.get("message"),
+            "severity": event.get("level"),
+            "raw_json": json.dumps(event, ensure_ascii=False),
+        })
+    return rows
 
 
 # ---------------------------------------------------------------------------
@@ -371,7 +487,7 @@ def already_imported(con: sqlite3.Connection, import_key: str):
 # 主流程
 # ---------------------------------------------------------------------------
 
-def build_session_item(*, exercise_code, set_index, reps, rows, summary, assessment, training_session):
+def build_session_item(*, exercise_code, set_index, reps, rows, summary, assessment, training_session, score_mode="none"):
     feedback_events = summary.get("feedback_events", [])
     effective_parameters = summary.get("effective_parameters") or summary.get("configuration") or {}
     rest_angle, target_angle = rest_target_angles(exercise_code, effective_parameters)
@@ -419,13 +535,21 @@ def build_session_item(*, exercise_code, set_index, reps, rows, summary, assessm
     capture_quality = compute_capture_quality(rows, reps)
     low_confidence = bool(capture_quality is not None and capture_quality < 0.6)
 
-    score_weights = DEFAULT_SCORE_WEIGHTS
-    quality_score, score_breakdown = compute_score(
-        reps_valid=reps_valid_count, reps_target=reps_target, reps_done=reps_done,
-        peak_angle_max=peak_angle_max, rest_angle=rest_angle, target_angle=target_angle,
-        compensation_count=compensation_count, too_fast_count=too_fast_count,
-        capture_quality=capture_quality, score_weights=score_weights,
-    )
+    if score_mode == "contract-d":
+        quality_score, score_breakdown = compute_contract_d_score(
+            reps_valid=reps_valid_count, reps_target=reps_target, reps_done=reps_done,
+            peak_angle_max=peak_angle_max, rest_angle=rest_angle, target_angle=target_angle,
+            compensation_count=compensation_count, too_fast_count=too_fast_count,
+            capture_quality=capture_quality, score_weights=DEFAULT_SCORE_WEIGHTS,
+        )
+    else:
+        quality_score = None
+        score_breakdown = compute_provisional_breakdown(
+            reps_valid=reps_valid_count, reps_target=reps_target, reps_done=reps_done,
+            peak_angle_max=peak_angle_max, rest_angle=rest_angle, target_angle=target_angle,
+            compensation_count=compensation_count, too_fast_count=too_fast_count,
+            capture_quality=capture_quality,
+        )
 
     item = {
         "exercise_code": exercise_code,
@@ -471,7 +595,8 @@ def compute_angle_trace(rows: list, reps: list, exercise_code: str, step_s: floa
     return json.dumps(points, ensure_ascii=False) if points else None
 
 
-def import_run(directory: Path, *, patient_id: int, plan_id, plan_item_id, db_path: Path, dry_run: bool):
+def import_run(directory: Path, *, patient_id: int, plan_id, plan_item_id, db_path: Path, dry_run: bool,
+                score_mode: str = "none"):
     summary, rows, assessment = load_run(directory)
     status = summary.get("status")
     if status in SKIP_STATUS:
@@ -485,6 +610,7 @@ def import_run(directory: Path, *, patient_id: int, plan_id, plan_item_id, db_pa
 
     groups = group_repetitions(summary)
     training_session = summary.get("training_session")
+    event_groups = assign_events_to_groups(summary.get("feedback_events", []), groups)
 
     algorithm_version = summary.get("algorithm_version")
     rule_snapshot = {
@@ -514,15 +640,20 @@ def import_run(directory: Path, *, patient_id: int, plan_id, plan_item_id, db_pa
             item, rep_rows = build_session_item(
                 exercise_code=exercise_code, set_index=set_index, reps=reps, rows=rows,
                 summary=summary, assessment=assessment, training_session=training_session,
+                score_mode=score_mode,
             )
-            items.append((item, rep_rows))
+            event_rows = build_session_events(event_groups.get(set_index, []), reps)
+            items.append((item, rep_rows, event_rows))
 
         if dry_run:
             print(f"[dry-run] 将导入 {directory}：动作={exercise_code}，{len(items)} 组，"
-                  f"共 {sum(len(r) for _, r in items)} 次动作，status={schema_status}")
-            for item, rep_rows in items:
+                  f"共 {sum(len(r) for _, r, _ in items)} 次动作，"
+                  f"{sum(len(e) for _, _, e in items)} 条提示事件，status={schema_status}，"
+                  f"score_mode={score_mode}")
+            for item, rep_rows, event_rows in items:
                 print(f"  - 第{item['set_index']}组：reps_done={item['reps_done']} "
-                      f"reps_valid={item['reps_valid']} quality_score={item['quality_score']}")
+                      f"reps_valid={item['reps_valid']} quality_score={item['quality_score']} "
+                      f"事件数={len(event_rows)}")
             return None
 
         cur = con.execute(
@@ -536,7 +667,7 @@ def import_run(directory: Path, *, patient_id: int, plan_id, plan_item_id, db_pa
         )
         session_id = cur.lastrowid
 
-        for item, rep_rows in items:
+        for item, rep_rows, event_rows in items:
             cur = con.execute(
                 "INSERT INTO session_items(session_id,plan_item_id,exercise_code,set_index,reps_target,reps_done,"
                 "reps_valid,peak_angle_max,peak_angle_mean,duration_ms,quality_score,score_breakdown_json,"
@@ -558,6 +689,13 @@ def import_run(directory: Path, *, patient_id: int, plan_id, plan_item_id, db_pa
                     (item_id, rr["rep_index"], rr["peak_angle"], rr["duration_ms"], rr["valid"],
                      rr["flags_json"], rr["hold_s"], rr["return_s"], rr["bridged_gaps"], rr["needs_review"]),
                 )
+            for ev in event_rows:
+                con.execute(
+                    "INSERT INTO session_events(session_item_id,rep_index,timestamp_s,code,message,severity,"
+                    "raw_json) VALUES(?,?,?,?,?,?,?)",
+                    (item_id, ev["rep_index"], ev["timestamp_s"], ev["code"], ev["message"], ev["severity"],
+                     ev["raw_json"]),
+                )
             if item["low_confidence"]:
                 con.execute(
                     "INSERT INTO alerts(patient_id,session_id,type,severity,message) VALUES(?,?,?,?,?)",
@@ -567,7 +705,8 @@ def import_run(directory: Path, *, patient_id: int, plan_id, plan_item_id, db_pa
                 )
         con.commit()
         print(f"[完成] session_id={session_id}，{len(items)} 组，"
-              f"共 {sum(len(r) for _, r in items)} 次动作，来自 {directory}")
+              f"共 {sum(len(r) for _, r, _ in items)} 次动作，"
+              f"{sum(len(e) for _, _, e in items)} 条提示事件，来自 {directory}")
         return session_id
     finally:
         con.close()
@@ -581,12 +720,18 @@ def main(argv=None):
     parser.add_argument("--plan-item-id", type=int, default=None)
     parser.add_argument("--db", type=Path, default=DEFAULT_DB)
     parser.add_argument("--dry-run", action="store_true", help="只打印将要导入的内容，不写数据库")
+    parser.add_argument("--score-mode", choices=["none", "contract-d"], default="none",
+                         help="默认 none：quality_score 留 NULL，score_breakdown_json 只存原始输入"
+                              "（reps_valid/reps_target、幅度比、事件计数、capture_quality），标 provisional。"
+                              "评分口径待常/陈确认，见 docs/decisions/0002。传 contract-d 才按接口契约 D 节"
+                              "公式现算并写进 quality_score，供联调对比用，不是默认行为。")
     args = parser.parse_args(argv)
 
     try:
         import_run(
             args.directory, patient_id=args.patient_id, plan_id=args.plan_id,
             plan_item_id=args.plan_item_id, db_path=args.db, dry_run=args.dry_run,
+            score_mode=args.score_mode,
         )
     except ImportError_ as exc:
         print(f"[失败] {exc}", file=sys.stderr)
