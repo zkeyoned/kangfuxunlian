@@ -50,6 +50,22 @@
 4. 如果改动影响到接口返回或请求字段，同步 `docs/03-接口契约.md`，并在 `docs/decisions/` 新增一条决策记录，知会前端（景）和后端（常）。
 5. 跑 `python3 tests/test_api.py`，必须全过才能合并。
 
+## schema.sql 必须每次重跑都不报错，不能用 ALTER TABLE
+
+`backend/db.py` 的 `init_db()` 每次启动服务都会对 `data/rehabtrack.sqlite3` 重跑一遍整份
+`schema.sql`（`fresh` 只控制要不要灌 `seed.json`，不控制要不要跑 schema，见该文件第 65-72
+行；`database/` 不改 `backend/` 代码，这个行为按它现在的样子当约束条件用）。这意味着
+`schema.sql` 里只能出现 `CREATE TABLE IF NOT EXISTS`、`CREATE INDEX IF NOT EXISTS`、
+`CREATE UNIQUE INDEX IF NOT EXISTS` 这类天然幂等的语句，**不能出现 `ALTER TABLE ADD
+COLUMN`**：这条语句不支持 `IF NOT EXISTS`，已经加过一次列的库下次启动会因为列已存在报
+`duplicate column name` 直接崩掉。
+
+所以：给已有表新增列，直接把新列写进对应 `CREATE TABLE IF NOT EXISTS` 语句的**末尾**（不
+重排已有列，新建库跟着 `schema.sql` 走一遍就自动有这些列）；`data/rehabtrack.sqlite3` 已经存
+在、不想 `--reset` 重建的人，去 `database/migrations/` 下找对应日期的 `.sql` 文件手工执行一次
+（`sqlite3 data/rehabtrack.sqlite3 < database/migrations/20260919-import-prep.sql` 这样）。
+`database/migrations/` 只是给旧库补课用的，不是每次启动自动跑的东西，新建库不需要碰它。
+
 ## 与后端的读写约定
 
 后端只通过 `backend/db.py` 里的函数读写数据库（`connect()`、`init_db()`、`load_seed()` 等），`backend/main.py` 不直接拼裸 SQL 语句操作核心表以外的逻辑。新增查询优先在 `db.py` 里加辅助函数，保持数据库访问集中在一处，方便以后换 PostgreSQL 时只改一个文件。
