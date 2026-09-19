@@ -165,4 +165,24 @@ One Euro速度自适应参数beta从0.04调至8（坐标单位为归一化坐标
 .\.venv\Scripts\python.exe -m unittest discover -s tests -v
 ```
 
+## 本机网页实时桥接
+
+`live_api.py` 把浏览器临时 JPEG 帧交给同一套 MediaPipe、跟踪、标定和动作状态机。
+它只监听 `127.0.0.1:8802`，不保存视频或关键点文件。算法核心仍可独立接收关键点。
+
+```powershell
+.\.venv\Scripts\python.exe live_api.py
+```
+
+接口：
+
+- `GET /healthz`
+- `POST /api/live/start`
+- `POST /api/live/{session_id}/frame`
+- `POST /api/live/{session_id}/stop`
+
+每帧响应保留契约要求的 `value`、`aux`、`visible` 和可选 `confidence`，并附加骨架、
+标定状态、动作阶段、实时提醒及训练进度供本地网页展示。检测到多人时不计算角度、不计次。
+此桥接只用于本机联调；组级结果落库仍走 `docs/03-接口契约.md` 的业务后端接口。
+
 锁定模式需要实时预览确认，不允许无人确认的离线运行。许可证与来源见THIRD_PARTY.md；本轮测试与未验证事项见VALIDATION_V04.md。
