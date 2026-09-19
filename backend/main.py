@@ -13,6 +13,8 @@ import json
 import logging
 import logging.handlers
 import os
+import re
+import sqlite3
 import sys
 import time
 from datetime import date, datetime, timedelta
@@ -111,6 +113,13 @@ def patient_in_scope(con, user: dict, patient_id: int) -> dict:
 class LoginIn(BaseModel):
     username: str
     password: str
+
+
+class RegisterIn(BaseModel):
+    username: str = Field(max_length=254)
+    password: str = Field(min_length=8, max_length=128)
+    display_name: str = Field(min_length=1, max_length=50)
+    role: str = "patient"
 
 
 class SessionStart(BaseModel):
@@ -308,9 +317,41 @@ def healthz(con=Depends(get_con)):
     return {"ok": True, "version": APP_VERSION, "users": n, "time": db.now()}
 
 
+@app.post("/api/v1/auth/register", status_code=201)
+def register(body: RegisterIn, request: Request, con=Depends(get_con)):
+    username = body.username.strip().lower()
+    name = body.display_name.strip()
+    if body.role != "patient":
+        raise HTTPException(400, "当前仅开放患者注册，康复师账号请联系团队配置")
+    if not name or not body.password.strip():
+        raise HTTPException(400, "姓名和密码不能为空")
+    if not (re.fullmatch(r"1[3-9]\d{9}", username) or re.fullmatch(r"[^\s@]+@[^\s@]+\.[^\s@]+", username)):
+        raise HTTPException(400, "请输入有效的手机号或邮箱")
+    password_hash = db.hash_password(body.password)
+    try:
+        # Lock through duplicate check and all inserts, including the audit row.
+        with con:
+            con.execute("BEGIN IMMEDIATE")
+            if con.execute("SELECT 1 FROM users WHERE lower(username)=?", (username,)).fetchone():
+                raise HTTPException(409, "该手机号或邮箱已注册，请返回登录")
+            institution_id = con.execute("INSERT INTO institutions(name) VALUES(?)", ("个人训练空间（待关联机构）",)).lastrowid
+            uid = con.execute(
+                "INSERT INTO users(institution_id,role,username,password_hash,display_name) VALUES(?,?,?,?,?)",
+                (institution_id, "patient", username, password_hash, name)).lastrowid
+            con.execute("INSERT INTO patients(user_id,institution_id) VALUES(?,?)", (uid, institution_id))
+            con.execute("INSERT INTO audit_logs(user_id,action,target,ip) VALUES(?,?,?,?)",
+                        (uid, "register", f"user:{uid}", request.client.host if request.client else None))
+    except sqlite3.IntegrityError:
+        raise HTTPException(409, "账号创建冲突，请返回登录或重试")
+    return {"ok": True, "username": username, "role": "patient"}
+
+
 @app.post("/api/v1/auth/login")
 def login(body: LoginIn, request: Request, con=Depends(get_con)):
-    u = db.one(con.execute("SELECT * FROM users WHERE username=? AND is_active=1", (body.username,)))
+    username = body.username.strip()
+    if "@" in username:
+        username = username.lower()
+    u = db.one(con.execute("SELECT * FROM users WHERE username=? AND is_active=1", (username,)))
     if not u or not db.verify_password(body.password, u["password_hash"]):
         db.audit(con, None, "login.fail", f"user:{body.username}", ip=request.client.host if request.client else None)
         raise HTTPException(401, "用户名或密码错误")
