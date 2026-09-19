@@ -31,6 +31,7 @@ sys.path.insert(0, str(Path(__file__).resolve().parent))
 import db  # noqa: E402
 from scoring import DEFAULT_WEIGHTS, score_item  # noqa: E402
 from care_links import install_routes as install_care_routes  # noqa: E402
+from training_reports import install_routes as install_report_routes  # noqa: E402
 
 ROOT = Path(__file__).resolve().parent.parent
 FRONTEND = ROOT / "frontend"
@@ -120,6 +121,7 @@ def patient_in_scope(con, user: dict, patient_id: int) -> dict:
 
 
 install_care_routes(app, get_con, current_user)
+install_report_routes(app, get_con, current_user, patient_in_scope)
 
 
 # ---------- 模型 ----------
