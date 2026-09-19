@@ -69,3 +69,9 @@ python3 tests/test_api.py
 visual_prescriptions.py / 004 迁移提供契约H接口。已关联康复师保存草稿或发布不可变版本，患者读取最新发布版。后续解除关联会使旧作者方案不再下发。组次允许患者本次自主调整，报告内保留方案快照与实际选择。参数是技术校验范围，临床适用性待康复师确认。
 
 运行 python backend/test_visual_prescriptions.py 与 python backend/test_plan_parameters.py。实时桥接部署说明见 algorithm/integration/README.md；前端独立文件也必须同步更新。
+
+## 补齐本机虚构演示患者
+
+显式运行 `python backend/provision_demo_patients.py`，新增赵敏（p.zhaomin / zhao123）、林雨晴（p.linyuqing / linyu123）、周启明（p.zhouqiming / zhou123），关联原有 dr.lin 演示康复师。张先生和吴女士继续使用种子账号 p.zhang / zhang123、p.wu / wu123。
+
+脚本不在服务启动时自动执行；重复执行不覆盖密码、档案和已更改的关联；同名登录账号冲突时整批回滚。只创建空演示档案，不伪造报告、诊断、知情同意或训练方案。公开的演示密码不可用于真实患者资料。外置前端同步增加六个登录入口（五患者、一康复师），沟通联系人取当前康复师真实关联列表；消息持久化仍沿用现有前端实现。
