@@ -81,3 +81,7 @@ visual_prescriptions.py / 004 迁移提供契约H接口。已关联康复师保�
 注册、新建患者及修改密码统一要求8–15位，同时包含英文字母和数字。旧密码在下次登录正确验证后检查，不合规返回 PASSWORD_RESET_REQUIRED，前端引导验证原密码再改密。修改撤销该账号所有令牌。演示旧短密码也必须改；快捷入口为初始密码，改后请手动输入。没有验证码找回功能。既有令牌不会根据不可逆哈希推断密码强弱，保留到原有效期或改密撤销。
 
 验证：python backend/test_password_policy.py。tests/test_api.py 仅在隔离演示库对短演示密码执行改密再运行闭环，勿用于真实数据。
+
+### 新患者训练入口
+
+迁移005随启动执行。GET/PUT /api/v1/me/training-selection 按登录患者隔离保存自主选择。新用户无默认动作，康复师发布方案优先；仅演示账号可在前端展示默认动作。验证：在 backend 下运行 python -m unittest test_training_selection。外部前端需同步 dist/app.js 与 dist/index.html，本仓库 PR 不含该前端。
