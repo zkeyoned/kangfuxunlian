@@ -25,7 +25,7 @@ from fastapi import Depends, FastAPI, HTTPException, Request, Response
 from fastapi.middleware.cors import CORSMiddleware
 from fastapi.responses import JSONResponse, StreamingResponse
 from fastapi.staticfiles import StaticFiles
-from pydantic import BaseModel, Field
+from pydantic import BaseModel, Field, field_validator
 
 sys.path.insert(0, str(Path(__file__).resolve().parent))
 import db  # noqa: E402
@@ -134,9 +134,29 @@ class LoginIn(BaseModel):
     password: str
 
 
-class RegisterIn(BaseModel):
+def valid_password(value):
+    return 8<=len(value)<=15 and bool(re.search(r"[A-Za-z]",value)) and bool(re.search(r"[0-9]",value))
+
+class PasswordPolicy(BaseModel):
+    password: str
+    @field_validator("password")
+    @classmethod
+    def validate_password(cls,value):
+        if not valid_password(value):raise ValueError("密码须为8–15位，且同时包含字母和数字")
+        return value
+
+class ChangePasswordIn(BaseModel):
+    username: str
+    old_password: str
+    new_password: str
+    @field_validator("new_password")
+    @classmethod
+    def validate_new(cls,value):
+        return PasswordPolicy.validate_password(value)
+
+class RegisterIn(PasswordPolicy):
     username: str = Field(max_length=254)
-    password: str = Field(min_length=8, max_length=128)
+    password: str = Field(min_length=8, max_length=15)
     display_name: str = Field(min_length=1, max_length=50)
     role: str = "patient"
 
@@ -200,7 +220,7 @@ class PlanIn(BaseModel):
     items: list[PlanItemIn]
 
 
-class PatientIn(BaseModel):
+class PatientIn(PasswordPolicy):
     username: str
     password: str
     display_name: str
@@ -374,6 +394,8 @@ def login(body: LoginIn, request: Request, con=Depends(get_con)):
     if not u or not db.verify_password(body.password, u["password_hash"]):
         db.audit(con, None, "login.fail", f"user:{body.username}", ip=request.client.host if request.client else None)
         raise HTTPException(401, "用户名或密码错误")
+    if not valid_password(body.password):
+        return JSONResponse(status_code=403,content={"error":"原密码不符合新规则，请重新设置8–15位且包含字母和数字的密码", "code":"PASSWORD_RESET_REQUIRED"})
     tok = db.issue_token(con, u["id"])
     db.audit(con, u["id"], "login", None, ip=request.client.host if request.client else None)
     out = {k: u[k] for k in ("id", "role", "display_name", "institution_id", "username")}
@@ -381,6 +403,20 @@ def login(body: LoginIn, request: Request, con=Depends(get_con)):
         p = db.one(con.execute("SELECT id FROM patients WHERE user_id=?", (u["id"],)))
         out["patient_id"] = p["id"] if p else None
     return {"token": tok, "user": out}
+
+
+@app.post("/api/v1/auth/change-password")
+def change_password(body: ChangePasswordIn, con=Depends(get_con)):
+    username=body.username.strip()
+    if "@" in username:username=username.lower()
+    with con:
+        con.execute("BEGIN IMMEDIATE")
+        u=con.execute("SELECT * FROM users WHERE username=? AND is_active=1",(username,)).fetchone()
+        if not u or not db.verify_password(body.old_password,u["password_hash"]):raise HTTPException(401,"账号或原密码错误")
+        con.execute("UPDATE users SET password_hash=? WHERE id=?",(db.hash_password(body.new_password),u["id"]))
+        con.execute("DELETE FROM tokens WHERE user_id=?",(u["id"],))
+        con.execute("INSERT INTO audit_logs(user_id,action,target) VALUES(?,?,?)",(u["id"],"password.change",f"user:{u['id']}"))
+    return {"ok":True}
 
 
 @app.post("/api/v1/auth/logout")

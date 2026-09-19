@@ -27,6 +27,9 @@ class CareTest(unittest.TestCase):
     @classmethod
     def login(cls,name,password):
         r=cls.c.post('/api/v1/auth/login',json={'username':name,'password':password})
+        if r.status_code==403 and r.json().get('code')=='PASSWORD_RESET_REQUIRED':
+            cls.c.post('/api/v1/auth/change-password',json={'username':name,'old_password':password,'new_password':password+'2026'})
+            r=cls.c.post('/api/v1/auth/login',json={'username':name,'password':password+'2026'})
         assert r.status_code==200,r.text
         return {'Authorization':'Bearer '+r.json()['token']}
 

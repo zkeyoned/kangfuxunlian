@@ -27,7 +27,11 @@ class ReportTests(unittest.TestCase):
 
     @classmethod
     def login(cls,u,p):
-        return {'Authorization':'Bearer '+cls.c.post('/api/v1/auth/login',json={'username':u,'password':p}).json()['token']}
+        r=cls.c.post('/api/v1/auth/login',json={'username':u,'password':p})
+        if r.status_code==403 and r.json().get('code')=='PASSWORD_RESET_REQUIRED':
+            cls.c.post('/api/v1/auth/change-password',json={'username':u,'old_password':p,'new_password':p+'2026'})
+            r=cls.c.post('/api/v1/auth/login',json={'username':u,'password':p+'2026'})
+        return {'Authorization':'Bearer '+r.json()['token']}
 
     @classmethod
     def tearDownClass(cls):cls.c.close();logging.shutdown()
