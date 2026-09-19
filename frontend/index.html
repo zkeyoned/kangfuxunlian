@@ -1,0 +1,173 @@
+<!doctype html>
+<html lang="zh-CN" data-theme="light">
+<head>
+  <meta charset="UTF-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1.0">
+  <meta name="description" content="康师复居家康复训练与专业随访前端演示">
+  <title>康师复 | 智能康复协作平台</title>
+  <link rel="icon" type="image/svg+xml" href="data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 64 64'%3E%3Crect width='64' height='64' rx='16' fill='%2318332c'/%3E%3Cpath d='M19 14h9v15l14-15h11L37 31l17 19H42L28 34v16h-9z' fill='%23f5c451'/%3E%3C/svg%3E">
+  <link rel="stylesheet" href="styles.css">
+</head>
+<body>
+  <section id="login-screen" class="login-screen">
+    <div class="login-brand-panel">
+      <a class="brand brand-dark" href="#" aria-label="康师复首页">
+        <span class="brand-mark" aria-hidden="true">复</span>
+        <span><b>康师复</b><small>REHAB COLLABORATION</small></span>
+      </a>
+      <div class="login-intro">
+        <p class="eyebrow">专业康复协作平台</p>
+        <h1>专业康复，延伸到每次训练</h1>
+        <p>连接康复师方案、实时动作识别与训练反馈，让康复进展清晰可见。</p>
+      </div>
+      <div class="login-trust"><strong>动作级识别</strong><span>独立指标评估</span><span>患者与康复师协同</span></div>
+    </div>
+    <div class="login-form-panel">
+      <form id="login-form" class="login-form" novalidate>
+        <div class="login-form-heading"><span>欢迎回来</span><h2>登录康师复</h2><p>选择身份，进入对应工作台。</p></div>
+        <fieldset class="role-switch"><legend>登录端</legend><div><button type="button" class="active" data-login-role="patient" aria-pressed="true">患者端</button><button type="button" data-login-role="therapist" aria-pressed="false">康复师端</button></div></fieldset>
+        <label>手机号、邮箱或账号<input id="login-account" name="account" autocomplete="username" placeholder="请输入手机号、邮箱或登录账号" required></label>
+        <label>密码<input id="login-password" name="password" type="password" autocomplete="current-password" placeholder="请输入密码" required></label>
+        <p id="login-error" class="login-error" role="alert" aria-live="polite"></p>
+        <button class="primary-button login-button" type="submit">登录</button>
+        <p class="auth-switch">还没有账号？<button type="button" id="show-register">立即注册</button></p>
+        <div class="demo-accounts"><p>演示账号</p><button type="button" data-demo-account="patient"><b>患者端</b><span>13800138001 / 123456</span></button><button type="button" data-demo-account="therapist"><b>康复师端</b><span>13800138002 / 123456</span></button></div>
+      </form>
+    </div>
+  </section>
+
+  <section id="register-screen" class="login-screen hidden">
+    <div class="login-brand-panel">
+      <a class="brand brand-dark" href="#" aria-label="康师复首页"><span class="brand-mark" aria-hidden="true">复</span><span><b>康师复</b><small>REHAB COLLABORATION</small></span></a>
+      <div class="login-intro"><p class="eyebrow">创建康复协作账号</p><h1>从清晰的身份开始协作</h1><p>患者记录训练与反馈，康复师管理方案与随访；一个账号对应一个工作台。</p></div>
+      <div class="login-trust"><strong>信息清晰</strong><span>双端协作</span><span>消息及时提醒</span></div>
+    </div>
+    <div class="login-form-panel">
+      <form id="register-form" class="login-form" novalidate>
+        <div class="login-form-heading"><span>新用户注册</span><h2>创建账号</h2><p>填写信息后即可返回登录。</p></div>
+        <fieldset class="role-switch"><legend>注册身份</legend><div><button type="button" class="active" data-register-role="patient" aria-pressed="true">患者</button><button type="button" data-register-role="therapist" aria-pressed="false">康复师</button></div></fieldset>
+        <label>用户名<input id="register-name" autocomplete="name" placeholder="请输入姓名" required></label>
+        <label>手机号或邮箱<input id="register-account" autocomplete="username" placeholder="请输入手机号或邮箱" required></label>
+        <label>密码<input id="register-password" type="password" autocomplete="new-password" placeholder="至少 6 位密码" required></label>
+        <p id="register-error" class="login-error" role="alert" aria-live="polite"></p>
+        <button class="primary-button login-button" type="submit">完成注册</button>
+        <p class="auth-switch">已有账号？<button type="button" id="show-login">返回登录</button></p>
+      </form>
+    </div>
+  </section>
+
+  <div id="app-shell" class="app-shell hidden">
+    <aside class="sidebar">
+      <a class="brand" href="#"><span class="brand-mark">复</span><span><b>康师复</b><small>REHAB COLLABORATION</small></span></a>
+      <div class="profile-block"><span class="avatar" id="profile-avatar">林</span><div><strong id="profile-name">林雨晴</strong><p id="profile-meta">患者 · 右膝康复中</p></div></div>
+      <nav id="patient-nav" class="side-nav" aria-label="患者端导航">
+        <button class="nav-item active" data-page="patient-home"><span>01</span>今日训练</button>
+        <button class="nav-item" data-page="patient-feedback"><span>02</span>动作反馈</button>
+        <button class="nav-item" data-page="patient-plan"><span>03</span>我的方案</button>
+        <button class="nav-item" data-page="patient-history"><span>04</span>训练记录</button>
+      </nav>
+      <nav id="therapist-nav" class="side-nav hidden" aria-label="康复师端导航">
+        <button class="nav-item active" data-page="therapist-overview"><span>01</span>患者总览</button>
+        <button class="nav-item" data-page="therapist-plans"><span>02</span>康复方案</button>
+        <button class="nav-item" data-page="therapist-library"><span>03</span>动作与规则</button>
+        <button class="nav-item" data-page="therapist-followup"><span>04</span>随访提醒</button>
+      </nav>
+      <div class="sidebar-foot"><button id="logout" class="text-button">退出登录</button><p>康师复产品演示</p></div>
+    </aside>
+
+    <main class="main-area">
+      <header class="topbar">
+        <button id="mobile-menu" class="icon-button menu-button" aria-label="打开菜单">☰</button>
+        <div class="breadcrumb"><span id="section-label">患者端</span><b id="page-label">今日训练</b></div>
+        <div class="top-actions"><button id="theme-toggle" class="icon-button" aria-label="切换深色模式">◐</button><button id="open-messages" class="notification-button" aria-label="打开在线沟通">消息 <i id="message-count">0</i></button></div>
+      </header>
+
+      <section id="patient-home" class="page active-page">
+        <div class="page-heading patient-heading">
+          <div><p class="eyebrow">9月17日 · 周四</p><h2 id="patient-greeting">下午好，雨晴</h2><p>今天的训练重点是伸膝控制与下肢稳定。疼痛明显时请暂停并联系康复师。</p></div>
+          <div class="plan-stamp"><span>当前方案</span><strong>轻中度膝骨关节炎</strong><small>初赛演示病例 · 右膝 · 第 2 周</small></div>
+        </div>
+        <div class="today-strip"><div><span>今日进度</span><strong><b id="completed-count">1</b> / 4</strong></div><div class="progress-track"><i id="today-progress" style="width:25%"></i></div><p>预计剩余 14 分钟</p></div>
+        <div class="section-title"><div><p class="eyebrow">TODAY'S SESSION</p><h3>四项训练</h3></div><p>每个动作采用独立评估标准，不以单一“合格率”概括。</p></div>
+        <div id="exercise-list" class="exercise-list"></div>
+      </section>
+
+      <section id="patient-feedback" class="page">
+        <div class="page-heading"><div><p class="eyebrow">动作反馈</p><h2>具体到每一个需要调整的细节</h2><p>以下为界面演示数据，用于展示动作级反馈结构。</p></div><span class="demo-badge">演示数据</span></div>
+        <div class="feedback-layout">
+          <aside class="feedback-index" id="feedback-index"></aside>
+          <article class="feedback-detail">
+            <div class="feedback-title"><div><p id="feedback-kicker" class="eyebrow">动作 01</p><h3 id="feedback-title">坐姿直腿抬高</h3></div><span id="feedback-status" class="status warn">需调整</span></div>
+            <div id="feedback-hero" class="feedback-hero"></div>
+            <div id="feedback-metrics" class="metric-table"></div>
+            <div class="therapist-note"><span>康复师建议</span><p id="therapist-note">先把腿完全伸直，再开始计时。下放时心里默数两秒，避免突然落下。</p></div>
+          </article>
+        </div>
+      </section>
+
+      <section id="patient-plan" class="page">
+        <div class="page-heading"><div><p class="eyebrow">我的方案</p><h2>右膝功能恢复 · 第 2 周</h2><p>由陈晓雯康复师制定，更新于 2026年9月16日。</p></div><button class="secondary-button" data-chat-patient="林雨晴">联系康复师</button></div>
+        <div class="plan-overview-line"><div><span>主要问题</span><b>轻中度膝骨关节炎</b></div><div><span>本周目标</span><b>改善伸膝控制与坐站稳定</b></div><div><span>训练频次</span><b>每周 5 天，每日 1 次</b></div></div>
+        <div class="content-section"><h3>方案安排</h3><div id="patient-plan-rows" class="plain-rows"></div></div>
+        <div class="safety-note"><b>训练边界</b><p>训练中疼痛达到 5 分或出现明显肿胀、眩晕时暂停训练。本页面不替代线下诊疗。</p></div>
+      </section>
+
+      <section id="patient-history" class="page">
+        <div class="page-heading"><div><p class="eyebrow">训练记录</p><h2>趋势比一次得分更重要</h2><p>按动作查看完成度、控制质量和需要持续关注的问题。</p></div><select class="select-control"><option>最近 7 天</option><option>最近 30 天</option></select></div>
+        <div class="history-summary"><div><span>完成训练</span><strong>5 / 7<small>天</small></strong></div><div><span>完成动作</span><strong>18<small>组</small></strong></div><div><span>主要改善</span><strong>+9°<small>伸膝角度</small></strong></div><div><span>持续关注</span><strong>下放<small>控制速度</small></strong></div></div>
+        <div class="trend-panel"><div class="section-title"><h3>近 7 天动作趋势</h3><span class="demo-badge">演示数据</span></div><div class="trend-chart" aria-label="动作表现趋势图"><span style="height:38%"><i>11</i></span><span style="height:52%"><i>12</i></span><span style="height:46%"><i>13</i></span><span style="height:68%"><i>14</i></span><span style="height:73%"><i>15</i></span><span style="height:65%"><i>16</i></span><span class="today" style="height:84%"><i>17</i></span></div></div>
+      </section>
+
+      <section id="therapist-overview" class="page">
+        <div class="page-heading"><div><p class="eyebrow">患者总览</p><h2 id="therapist-greeting">陈老师，今天有 5 个动作需要复核</h2><p>按风险与动作问题排列，快速定位需要调整方案的患者。</p></div><button class="primary-button" data-goto="therapist-plans">＋ 新建康复方案</button></div>
+        <div class="overview-stats"><div><span>管理中患者</span><strong>24</strong><small>6 种康复方向</small></div><div><span>今日已训练</span><strong>16</strong><small>完成 67%</small></div><div><span>动作需复核</span><strong>5</strong><small>较昨日 +2</small></div><div class="attention"><span>疼痛反馈</span><strong>2</strong><small>建议今日联系</small></div></div>
+        <div class="filter-row"><input type="search" placeholder="搜索患者姓名或病症"><select><option>全部康复方向</option><option>膝骨关节炎</option><option>前交叉韧带术后</option><option>肩袖修复术后</option><option>腰痛</option></select><select><option>按关注优先级</option><option>按最近训练</option></select></div>
+        <div class="patient-table" role="table"><div class="table-head" role="row"><span>患者</span><span>病症与阶段</span><span>今日训练</span><span>最近动作问题</span><span>状态</span><span></span></div><div id="patient-rows"></div></div>
+      </section>
+
+      <section id="therapist-plans" class="page">
+        <div class="page-heading"><div><p class="eyebrow">康复方案编辑器</p><h2>从病症到动作，建立可执行的训练处方</h2><p>为不同患者选择康复方向、阶段、动作和独立量化规则。</p></div><span id="save-state" class="save-state">未保存</span></div>
+        <div class="builder-steps" aria-label="方案编辑步骤"><span class="active">1 患者与病症</span><span>2 选择动作</span><span>3 设置规则</span><span>4 发布</span></div>
+        <div class="plan-builder">
+          <div class="builder-main">
+            <section class="form-section"><div class="section-number">01</div><div class="form-content"><h3>患者与康复方向</h3><div class="field-grid"><label>患者<select id="plan-patient"><option>林雨晴 · 女 · 38岁</option><option>赵敏 · 女 · 62岁</option><option>周启明 · 男 · 29岁</option></select></label><label>康复方向<select id="condition-select"><option>膝骨关节炎</option><option>前交叉韧带重建术后</option><option>全膝关节置换术后</option><option>踝关节扭伤</option><option>非特异性腰痛</option><option>肩袖修复术后</option></select></label><label>患侧<select><option>右侧</option><option>左侧</option><option>双侧</option><option>不适用</option></select></label><label>康复阶段<select><option>功能恢复期</option><option>急性保护期</option><option>力量重建期</option><option>回归活动期</option></select></label></div><p class="form-hint">初赛演示默认展示轻中度膝骨关节炎，产品结构支持扩展其他病症与康复阶段。</p></div></section>
+            <section class="form-section"><div class="section-number">02</div><div class="form-content"><h3>选择训练动作</h3><div id="library-filter" class="inline-tabs"><button class="active">推荐动作</button><button>膝关节</button><button>髋关节</button><button>躯干</button><button>上肢</button></div><div id="action-picker" class="action-picker"></div></div></section>
+            <section class="form-section"><div class="section-number">03</div><div class="form-content"><h3>动作规则与训练剂量</h3><p class="section-help">每个动作拥有独立指标，点击动作名称展开设置。</p><div id="rule-editor" class="rule-editor"></div></div></section>
+            <section class="form-section"><div class="section-number">04</div><div class="form-content"><h3>频次与安全边界</h3><div class="field-grid"><label>每周训练<select><option>5 天</option><option>3 天</option><option>7 天</option></select></label><label>每日次数<select><option>1 次</option><option>2 次</option></select></label><label>疼痛暂停阈值<div class="input-suffix"><input type="number" value="5" min="0" max="10"><span>/ 10</span></div></label><label>计划周期<select><option>2 周</option><option>4 周</option><option>6 周</option></select></label></div><label class="wide-label">补充说明<textarea>若训练后疼痛持续超过 2 小时或出现明显肿胀，请暂停并联系康复师。</textarea></label></div></section>
+          </div>
+          <aside class="builder-summary"><p class="eyebrow">方案摘要</p><h3 id="summary-condition">膝骨关节炎</h3><p>林雨晴 · 右侧 · 功能恢复期</p><dl><div><dt>已选动作</dt><dd id="selected-count">4 项</dd></div><div><dt>预计时长</dt><dd>18 分钟</dd></div><div><dt>训练频次</dt><dd>每周 5 天</dd></div></dl><div id="selected-summary" class="selected-summary"></div><button id="publish-plan" class="primary-button full-button">发布给患者</button><button id="save-draft" class="secondary-button full-button">保存草稿</button></aside>
+        </div>
+      </section>
+
+      <section id="therapist-library" class="page">
+        <div class="page-heading"><div><p class="eyebrow">动作与规则</p><h2>动作不是模板，指标也不该一刀切</h2><p>定义每个动作的阶段、识别指标、纠错文案与拍摄要求。</p></div><button class="primary-button">＋ 新建动作</button></div>
+        <div id="rule-library" class="rule-library"></div>
+      </section>
+
+      <section id="therapist-followup" class="page">
+        <div class="page-heading"><div><p class="eyebrow">随访提醒</p><h2>把需要沟通的时刻集中起来</h2><p>疼痛变化、反复动作问题和低依从性将进入随访队列。</p></div></div>
+        <div class="followup-list"><article><time>今天 09:42</time><div><span class="status danger">优先</span><h3>赵敏 · 膝骨关节炎</h3><p>连续两次训练后疼痛反馈达到 6 分，请确认训练剂量。</p></div><button class="secondary-button" data-chat-patient="赵敏">在线沟通</button></article><article><time>昨天 20:16</time><div><span class="status warn">动作复核</span><h3>林雨晴 · 膝骨关节炎</h3><p>坐姿伸膝连续三组顶点保持不足，建议查看动作片段。</p></div><button class="secondary-button" data-chat-patient="林雨晴">在线沟通</button></article><article><time>9月15日</time><div><span class="status neutral">依从性</span><h3>周启明 · 前交叉韧带术后</h3><p>计划训练连续两天未完成，可发送提醒并询问原因。</p></div><button class="secondary-button" data-chat-patient="周启明">在线沟通</button></article></div>
+      </section>
+    </main>
+  </div>
+
+  <section id="training-screen" class="training-screen" aria-hidden="true">
+    <header class="training-head"><button class="training-back" data-close-training aria-label="返回今日训练">← 返回</button><div><p id="training-kicker" class="eyebrow">动作 01</p><h2 id="training-title">坐姿直腿抬高</h2></div><div class="camera-state"><i></i>摄像头已就绪</div></header>
+    <div class="training-grid"><div class="camera-stage"><img id="training-image" src="assets/seated-knee-extension-v2.jpg" alt="动作识别画面"><div class="frame-guide"><span>请保持全身在画面内</span></div><div class="phase-pill">当前阶段 <b id="phase-name">准备</b></div></div><aside class="live-panel"><div class="live-cue"><span>即时提示</span><strong id="live-cue">请坐直，患侧脚尖朝前</strong><p id="live-cue-detail">识别稳定后开始计次</p></div><div id="live-metrics" class="live-metrics"></div><div class="cue-log"><div><h3>本组反馈</h3><span>实时更新</span></div><ol id="cue-log"><li><time>准备</time><p>调整相机，让髋、膝、踝完整入镜。</p></li></ol></div><button id="start-training" class="primary-button full-button">开始识别</button><p class="training-disclaimer">演示界面仅用于产品原型展示，反馈不构成医疗诊断。</p></aside></div>
+  </section>
+  <dialog id="exercise-guide-dialog" class="guide-dialog">
+    <button class="dialog-close" type="button" data-close-guide aria-label="关闭">×</button>
+    <p class="eyebrow">开始前请确认</p><h2 id="guide-title">动作要领</h2>
+    <ol id="guide-steps"></ol><p id="guide-note" class="guide-note"></p><p id="guide-dose" class="guide-dose"></p>
+    <div class="dialog-actions"><button class="secondary-button" type="button" data-close-guide>稍后再练</button><button id="confirm-training" class="primary-button" type="button">已了解，进入识别</button></div>
+  </dialog>
+  <dialog id="message-dialog" class="message-dialog">
+    <header><div><p class="eyebrow">在线沟通</p><h2 id="message-title">与康复师沟通</h2></div><button class="dialog-close" type="button" data-close-messages aria-label="关闭">×</button></header>
+    <div id="message-contacts" class="message-contacts"></div>
+    <div id="message-thread" class="message-thread" aria-live="polite"></div>
+    <form id="message-form" class="message-compose"><input id="message-input" maxlength="180" placeholder="输入消息…" aria-label="输入消息" required><button class="primary-button" type="submit">发送</button></form>
+  </dialog>
+  <div id="toast" class="toast" role="status" aria-live="polite"></div>
+  <script src="app.js"></script>
+</body>
+</html>
