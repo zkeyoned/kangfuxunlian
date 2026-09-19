@@ -1,0 +1,255 @@
+{
+  "version": "0.6.0",
+  "files": [
+    {
+      "path": ".gitignore",
+      "bytes": 64,
+      "sha256": "e7968a696c73e3ccda1f4614d227356c3755c64f843f30f0d7e178483859099f"
+    },
+    {
+      "path": ".vscode/launch.json",
+      "bytes": 337,
+      "sha256": "c4458a27d5441154806432955d6d4a0855f0369cb19ecb86724d8351312f1533"
+    },
+    {
+      "path": ".vscode/settings.json",
+      "bytes": 133,
+      "sha256": "1aa3cb63857f339c5320e6a0b6fbcb4b326c11425f2defed054702b4cf27d3cf"
+    },
+    {
+      "path": "app.py",
+      "bytes": 13695,
+      "sha256": "1f02f819dceb8267598ecbfb1bc4452dbebc9f0b022a835c6c27576b09fc0c73"
+    },
+    {
+      "path": "COMPARISON_V02.md",
+      "bytes": 2388,
+      "sha256": "6d32716e41e3539ed561bdd9d27d9eced6e446b669b3022dc417ff0318a3c59c"
+    },
+    {
+      "path": "COMPARISON_V03.md",
+      "bytes": 3100,
+      "sha256": "0f7943a8b5f4a86011bbb3fff911415c1ed03a4fa061ae7a972cd2df9ae149e4"
+    },
+    {
+      "path": "config/knee_extension.json",
+      "bytes": 2361,
+      "sha256": "758ffb26b1611b8b368ed81bfbfe2b7029eddd9d1a79743de4c5a6c889cad91e"
+    },
+    {
+      "path": "examples/synthetic_frames.jsonl",
+      "bytes": 39508,
+      "sha256": "280e41b525cea068be2812e09b709297bc7fb5ec0e5e1f9479896fca64c55e3b"
+    },
+    {
+      "path": "examples/synthetic_summary.json",
+      "bytes": 857,
+      "sha256": "f5cd2929b73a915cb8122d9c585d7c4634fe9e6c4ea5b318126622f04078ad39"
+    },
+    {
+      "path": "licenses/MediaPipe-LICENSE.txt",
+      "bytes": 12331,
+      "sha256": "8707eef0533987efc5b155d64761eeb6e20793f50b9bd1a68dad1cf4719d0ed8"
+    },
+    {
+      "path": "licenses/MMPose-LICENSE.txt",
+      "bytes": 11400,
+      "sha256": "aa2c6f3408169b96e5547c875deb481c91502514c1885fa0acb4b596c8909cb9"
+    },
+    {
+      "path": "licenses/RTMLib-LICENSE.txt",
+      "bytes": 11346,
+      "sha256": "ec0a9c27a980866653f5a9901ea0e2458df074b1516e45c6842736ee5c5a4a1c"
+    },
+    {
+      "path": "licenses/RTMPose-MODEL-LICENSE-NOTES.md",
+      "bytes": 772,
+      "sha256": "bc4b15244b0c91813cbbadc483325728a078edf13af1c158e0b01c5d4b23f0f0"
+    },
+    {
+      "path": "licenses/YOLOX-LICENSE.txt",
+      "bytes": 11371,
+      "sha256": "0ec3668d3274bcf29e8a29e9576d5a2cd96fc78d3c5bec4387355a796e5d9088"
+    },
+    {
+      "path": "README.md",
+      "bytes": 17186,
+      "sha256": "a53b451c87668be7b111dcdb1814561fceef5af726acbb9a077d7ff6104d7193"
+    },
+    {
+      "path": "README_V03_HISTORY.md",
+      "bytes": 10124,
+      "sha256": "41e195870063676a2c15f5f07527fc87e97de05a560411a2f87e5123cfbcd082"
+    },
+    {
+      "path": "rehab_pose/__init__.py",
+      "bytes": 96,
+      "sha256": "4e290854c9eafcb2488237dfa3aa38e296520fc45fecf00be47d34fd3a2280f3"
+    },
+    {
+      "path": "rehab_pose/assessment.py",
+      "bytes": 8365,
+      "sha256": "c152d0c90cb321810629ae7bd46a0fa38d85a6bd3bcd26d7ef0744aef81ec0a3"
+    },
+    {
+      "path": "rehab_pose/assessment_extended.py",
+      "bytes": 4849,
+      "sha256": "8478ffb10872bf51aecc92db5fadb25861bdebc8455181fef782de7537598e53"
+    },
+    {
+      "path": "rehab_pose/core.py",
+      "bytes": 9478,
+      "sha256": "1bb92a36025959612b3896f5bbf6adbcb59d196167fbba6f0eceb021df91cdfe"
+    },
+    {
+      "path": "rehab_pose/exercise_rules.py",
+      "bytes": 5207,
+      "sha256": "a889346bff1c166f247e6f17962b77241f4526073f1c17a97dedd04a253f461b"
+    },
+    {
+      "path": "rehab_pose/exercises.py",
+      "bytes": 4887,
+      "sha256": "208cdf67fc924ceda57d30b8f8079f71f8082d3034c4de629b5c74be26073c3e"
+    },
+    {
+      "path": "rehab_pose/leg_selection.py",
+      "bytes": 2050,
+      "sha256": "104b0e57659d205a87b667410df1fac49237fd9afb55f5a9820e0df4c0ce990a"
+    },
+    {
+      "path": "rehab_pose/measures.py",
+      "bytes": 7963,
+      "sha256": "5b98f35314b81f97d2257c70359e93d7e6d07cb8de94bfc9bba0be433e19d144"
+    },
+    {
+      "path": "rehab_pose/model.py",
+      "bytes": 7550,
+      "sha256": "e1fba0bbaff93ff2bb48d2fe3d412fe5a06a59e41cf6a90f81d480df43ed1a93"
+    },
+    {
+      "path": "rehab_pose/run.py",
+      "bytes": 30164,
+      "sha256": "f50faa12027a0dbc67efa98f86ad71e3f228f70a015e6ea213390fc6cdc3eca3"
+    },
+    {
+      "path": "rehab_pose/session.py",
+      "bytes": 3485,
+      "sha256": "46eaca6bfd5a769699c0e5b7285b210e50fad744a910c0b6733d1695fb5c6ff2"
+    },
+    {
+      "path": "rehab_pose/subject.py",
+      "bytes": 4059,
+      "sha256": "434ef99435b90a1bf8b2c59851ff2970a102600790d5a9d3687a48b41f1bdc56"
+    },
+    {
+      "path": "rehab_pose/tracking.py",
+      "bytes": 12098,
+      "sha256": "a295b7a38f85431a7d46ddf159d7416b14590954bd39cb5a96a29484bede5bfa"
+    },
+    {
+      "path": "replay_tracking.py",
+      "bytes": 3382,
+      "sha256": "bf12450c37b6fefa46e715cb2481ae63a1c101e1a9194774f17bc3810b3f1ebb"
+    },
+    {
+      "path": "requirements-lock.txt",
+      "bytes": 544,
+      "sha256": "83e799fceb6992a00e95ef451b81e0774f084e05ba5b868ccec22f94ae50e0f2"
+    },
+    {
+      "path": "requirements-rtmpose.txt",
+      "bytes": 185,
+      "sha256": "86c969afbc863553449cfbeddad80b857049d0b4b263b2f4b9ccee317506f8f8"
+    },
+    {
+      "path": "requirements.txt",
+      "bytes": 73,
+      "sha256": "bc25f00863d56304de62b9f3019623ac6dadce514c87bfcc76d3b3db5c5de50e"
+    },
+    {
+      "path": "setup.ps1",
+      "bytes": 920,
+      "sha256": "c3c50d6c0171525021878b6c49606ef19dee2e338438facca974edced29ed948"
+    },
+    {
+      "path": "TEAM_START_HERE.md",
+      "bytes": 4222,
+      "sha256": "bced39dc5c9ccd97c6d19255eb5141b28893fcdc6a990df858fcb3cb3d7aa0f9"
+    },
+    {
+      "path": "tests/test_adaptive_reference.py",
+      "bytes": 1785,
+      "sha256": "ad628bda2f879260e63f672714ecbb59d92d59372a18ed3aae2903e1a30e970d"
+    },
+    {
+      "path": "tests/test_assessment.py",
+      "bytes": 2062,
+      "sha256": "a5335232820b165dec3976745d9dc21b9d8708cdd0cc28fd7a72f52f1d51a2da"
+    },
+    {
+      "path": "tests/test_capture_quality.py",
+      "bytes": 1935,
+      "sha256": "c51cb96df79d41a322bbc2abb6f45333bf55547061e5d1140951760f5f44aeb0"
+    },
+    {
+      "path": "tests/test_core.py",
+      "bytes": 3484,
+      "sha256": "e3614a64f8d76f1ed5b7287fec3f4f795540ef6ab50f2152938a2e64fbbf672c"
+    },
+    {
+      "path": "tests/test_exercises_extended.py",
+      "bytes": 3549,
+      "sha256": "f60490bed39b5601109b23c8d140e8d69318271d24adb590a988972c6cfb11c5"
+    },
+    {
+      "path": "tests/test_feedback_fix.py",
+      "bytes": 1906,
+      "sha256": "cb51eb0b23671ea6e63f82eab3899acc273f85912360ba4b070a08a05c22fb22"
+    },
+    {
+      "path": "tests/test_occlusion.py",
+      "bytes": 4211,
+      "sha256": "4338314fc0b3c9114c19ed8c225f23d708fb6c1a84dc4d48817d67fb0376995e"
+    },
+    {
+      "path": "tests/test_recorded_regression.py",
+      "bytes": 1542,
+      "sha256": "7cd9e105761a3d1afefcb8b47e61597ebb3c3ab735a4083f81f859620b62bc62"
+    },
+    {
+      "path": "tests/test_session.py",
+      "bytes": 1718,
+      "sha256": "645bd6ff728e32c9740464cad79775c0e00a83c62897d4f4ff0095f0aaa27627"
+    },
+    {
+      "path": "tests/test_tracking.py",
+      "bytes": 4088,
+      "sha256": "fc00f24435cab2ebf17e68be881db5b602b48590cdb6de94c1a36062ab78041d"
+    },
+    {
+      "path": "tests/test_v04.py",
+      "bytes": 7504,
+      "sha256": "a1bf5d270aa616555f5a75ef06c10c3f5c02f4045f0f2c5e6f1f4bae19b63c25"
+    },
+    {
+      "path": "THIRD_PARTY.md",
+      "bytes": 4556,
+      "sha256": "423f751120e04bcad223413c1a1cbca66c522d65e047d20aff90477616dfa408"
+    },
+    {
+      "path": "VALIDATION.md",
+      "bytes": 2367,
+      "sha256": "236628ea98e9cde1b624da3e88a1955ca2fef84233007762d898918a1fed46bb"
+    },
+    {
+      "path": "VALIDATION_V04.md",
+      "bytes": 4511,
+      "sha256": "2202c648269766601c16575bd155a7edb2d300986191a1f651d6d984a0e122c1"
+    },
+    {
+      "path": "VALIDATION_V041.md",
+      "bytes": 601,
+      "sha256": "5e54f0c12e15b49da008d6df776eb136c381de06dc365ac7c5d9487c5618b311"
+    }
+  ]
+}

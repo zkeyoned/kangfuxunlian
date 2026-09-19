@@ -1,0 +1,35 @@
+{
+  "synthetic": true,
+  "note": "SIMULATED SIGNAL, NOT PATIENT OR MODEL VALIDATION",
+  "configuration": {
+    "rest_max_deg": 105,
+    "start_deg": 115,
+    "target_deg": 160,
+    "hysteresis_deg": 5,
+    "min_excursion_deg": 20,
+    "reversal_deg": 8,
+    "min_hold_s": 2,
+    "min_return_s": 1,
+    "rest_dwell_s": 0.25,
+    "max_gap_s": 0.3,
+    "smoothing_tau_s": 0,
+    "min_confidence": 0.6
+  },
+  "repetitions": [
+    {
+      "index": 1,
+      "start_s": 0.7000000000000001,
+      "end_s": 4.4,
+      "min_included_deg": 90,
+      "max_included_deg": 170,
+      "extension_to_first_peak_s": 0.5499999999999999,
+      "target_hold_s": 2.7,
+      "return_s": 0.5500000000000003,
+      "target_comparison": {
+        "amplitude_met": true,
+        "hold_met": true,
+        "return_time_met": false
+      }
+    }
+  ]
+}
