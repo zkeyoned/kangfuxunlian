@@ -1,4 +1,16 @@
-# 康复视觉演示 v0.6（常的本地 VS Code 项目）
+# 康复视觉演示 v0.7（常的本地 VS Code 项目）
+
+## v0.7 动作1量化标准
+
+动作1已按团队提供的《坐姿伸膝动作量化标准 v0.1》更新。默认目标膝夹角170°、连续保持5秒；起始姿势稳定2秒后，以个人起始膝角为基线。膝角相对基线增加10°并持续0.2秒才启动；达到170°持续0.2秒才确认进入目标；目标带采用5°滞回；峰值下降5°持续0.2秒才确认回落；回到起始角±10°并稳定0.5秒才闭合一个完整周期。
+
+每次动作新增输出 `knee_start_deg`、`knee_peak_deg`、`knee_excursion_deg`、`time_to_target_s`、`target_hold_s`、`return_s`、`cycle_duration_s`、`target_reached` 和 `target_completed`。完整周期数与目标完成数分开，`summary.json` 增加 `target_completed_reps` 和 `action_standard_version`。
+
+仓库接口仍使用 `docs/03-接口契约.md` A节规定的扁平rep结构。`rehab_pose/contract.py` 把内部详细结果转换为 `rep_index / peak_angle / duration_ms / valid / flags`，并写入 `summary.json` 的 `contract_reps`。因此本次没有修改公共接口契约；前端和后端应读取 `contract_reps`，详细研究字段继续保留在 `repetitions`。
+
+动作1前倾/后仰超过相对基线15°、大腿移动超过10°均需持续0.5秒才提示；同类提示冷却5秒。瞬时 `knee_velocity_deg_s` 继续输出，但快慢结论改为阶段用时：到达目标或返回少于1秒才判定过快。MediaPipe暂用0.70可见性阈值；真实录像证明RTMPose的模型分数不能直接套0.70，仍用0.30并在结果配置快照中记录。
+
+真实旧录像回归：2644帧中1930帧可靠，按新规则识别5个完整周期，其中0次达到“170°并保持5秒”；旧版同一录像曾计8次，差异来自新的返回带、目标确认和保持规则。该结果用于工程回归，不代表临床准确率。81项自动测试通过。简洁动作指导见 `ACTION1_QUICK_GUIDE.md`。
 
 ## v0.6 动作2 / 6 / 8
 
@@ -120,9 +132,9 @@ summary.json与assessment.json增加training_session：计划、当前组、组�
 
 标定取连续稳定窗口的中位数；关键点中断会重新等待稳定，丢失超过2秒会使参考失效。缺少肩部时动作1仍可标定膝角和大腿方向，但躯干相对指标为null。
 
-动作1训练中提供躯干前/后偏移、大腿变化、速度超限的事件提示；默认持续0.3秒才触发，同类提示间隔3秒。每次完成后再比较幅度、保持、返回时间。事件含中文message和英文code；视频窗口显示code，JSON保留完整中文。
+动作1训练中提供躯干前/后偏移与大腿变化提示；异常持续0.5秒才触发，同类提示间隔5秒。完成动作后比较幅度、连续保持、到达目标用时和返回用时。事件含中文message和英文code；视频窗口显示code，JSON保留完整中文。
 
-当前测试值包括躯干/大腿变化15度、膝角速度180度/秒；这些是可调试参数，不是康复标准。集中在config/knee_extension.json的measurement和parameters中，需康复师确认后才能用于具体训练目标。
+当前动作1测试值包括躯干相对变化15度、大腿相对变化10度、目标膝夹角170度和连续保持5秒。`knee_velocity_deg_s`仅作为观测数据；动作快慢按阶段实际用时判断。这些规则集中在config/knee_extension.json中，仍需康复师审核和真人测量验证。
 
 ## 动作2、6、8：仅实验规则
 
@@ -147,7 +159,7 @@ One Euro速度自适应参数beta从0.04调至8（坐标单位为归一化坐标
 
 ## 输出
 
-每次运行创建独立results目录，旧数据不覆盖。schema_version为1.3，algorithm_version为0.4.0。
+每次运行创建独立results目录，旧数据不覆盖。当前动作1输出schema_version为1.4，algorithm_version为0.7.0。
 
 - frames.jsonl：原始与过滤后的关键点、预测显示、膝角、measurement_metrics、calibration、subject、feedback_events和动作阶段。
 - summary.json：动作结果、配置快照、模型哈希、标定参考、提示事件和实验标记。
@@ -166,3 +178,4 @@ One Euro速度自适应参数beta从0.04调至8（坐标单位为归一化坐标
 ```
 
 锁定模式需要实时预览确认，不允许无人确认的离线运行。许可证与来源见THIRD_PARTY.md；本轮测试与未验证事项见VALIDATION_V04.md。
+

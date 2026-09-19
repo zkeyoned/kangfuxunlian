@@ -7,7 +7,7 @@ import math
 class TrainingPlan:
     sets: int = 3
     reps_per_set: int = 10
-    hold_s: float = 2.
+    hold_s: float = 5.
     rest_s: float = 30.
 
     def __post_init__(self):
@@ -71,3 +71,4 @@ class TrainingSession:
         if self.status!='completed':
             self.status='ended_incomplete';self.rest_until=None
             self.events.append({'code':'SESSION_ENDED','timestamp_s':t,'reason':reason})
+

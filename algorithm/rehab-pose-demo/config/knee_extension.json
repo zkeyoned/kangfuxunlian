@@ -2,7 +2,7 @@
   "note": "TECHNICAL TEST PARAMETERS ONLY. Not a clinical prescription.",
   "backend_parameters": {
     "mediapipe": {
-      "min_confidence": 0.6
+      "min_confidence": 0.7
     },
     "rtmpose": {
       "min_confidence": 0.3
@@ -25,16 +25,21 @@
   "parameters": {
     "rest_max_deg": 105,
     "start_deg": 115,
-    "target_deg": 160,
+    "target_deg": 170,
     "hysteresis_deg": 5,
     "min_excursion_deg": 20,
-    "reversal_deg": 8,
-    "min_hold_s": 2,
+    "reversal_deg": 5,
+    "min_hold_s": 5,
     "min_return_s": 1,
-    "rest_dwell_s": 0.25,
+    "rest_dwell_s": 0.5,
     "max_gap_s": 0.3,
     "smoothing_tau_s": 0.08,
-    "min_confidence": 0.6
+    "min_confidence": 0.7,
+    "rest_min_deg": 0,
+    "start_dwell_s": 0.2,
+    "target_dwell_s": 0.2,
+    "reversal_dwell_s": 0.2,
+    "attempt_timeout_s": 30
   },
   "measurement": {
     "calibration_s": 2.0,
@@ -43,10 +48,10 @@
     "velocity_window_s": 0.2,
     "max_sample_gap_s": 0.3,
     "invalidate_after_s": 2.0,
-    "feedback_dwell_s": 0.3,
-    "feedback_cooldown_s": 3.0,
+    "feedback_dwell_s": 0.5,
+    "feedback_cooldown_s": 5.0,
     "trunk_delta_limit_deg": 15.0,
-    "thigh_delta_limit_deg": 15.0,
+    "thigh_delta_limit_deg": 10.0,
     "speed_limit_deg_s": 180.0
   },
   "exercise_profiles": {
@@ -92,3 +97,4 @@
     "cooldown_s": 3
   }
 }
+

@@ -14,8 +14,9 @@ class AdaptiveReferenceTests(unittest.TestCase):
         for i in range(20):
             p=observed(120);o=m.update(i*.05,p,640,480);a.update(i*.05,p,o)
         self.assertIsNotNone(o['calibration']['baseline'])
-        self.assertAlmostEqual(a.engine.config.rest_max_deg,126)
-        self.assertAlmostEqual(a.engine.config.start_deg,132)
+        self.assertAlmostEqual(a.engine.config.rest_min_deg,110)
+        self.assertAlmostEqual(a.engine.config.rest_max_deg,130)
+        self.assertAlmostEqual(a.engine.config.start_deg,130)
         sequence=list(range(120,171,5))+[170]*50+list(range(170,119,-2))+[120]*10
         for i,k in enumerate(sequence,20):
             p=observed(k);o=m.update(i*.05,p,640,480);a.update(i*.05,p,o)
@@ -37,3 +38,4 @@ class AdaptiveReferenceTests(unittest.TestCase):
         with patch('rehab_pose.leg_selection.metrics',return_value=observed()):
             self.assertFalse(leg.click(350,250,[],640,480,.3))
         self.assertFalse(leg.confirmed)
+

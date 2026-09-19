@@ -1,5 +1,5 @@
 {
-  "version": "0.6.0",
+  "version": "0.7.0",
   "files": [
     {
       "path": ".gitignore",
@@ -13,13 +13,18 @@
     },
     {
       "path": ".vscode/settings.json",
-      "bytes": 133,
-      "sha256": "1aa3cb63857f339c5320e6a0b6fbcb4b326c11425f2defed054702b4cf27d3cf"
+      "bytes": 361,
+      "sha256": "3944bdb3f05ee423498fb540b0ef4a7bb1ad7a6f4144347ad79b62f8e86d05ff"
+    },
+    {
+      "path": "ACTION1_QUICK_GUIDE.md",
+      "bytes": 650,
+      "sha256": "dacdb375e7ddf8b5ffaca39bf279fb6ece8d96b0ba9d76ee480987d6574313a3"
     },
     {
       "path": "app.py",
-      "bytes": 13695,
-      "sha256": "1f02f819dceb8267598ecbfb1bc4452dbebc9f0b022a835c6c27576b09fc0c73"
+      "bytes": 13892,
+      "sha256": "24f62399ba50939a39f0a8357a67a54172607231074aef2debb067efdb304372"
     },
     {
       "path": "COMPARISON_V02.md",
@@ -33,8 +38,8 @@
     },
     {
       "path": "config/knee_extension.json",
-      "bytes": 2361,
-      "sha256": "758ffb26b1611b8b368ed81bfbfe2b7029eddd9d1a79743de4c5a6c889cad91e"
+      "bytes": 2481,
+      "sha256": "32602f8cd2efd17af83ab5a78484c015f7675187880d8cd05d772294c1967acf"
     },
     {
       "path": "examples/synthetic_frames.jsonl",
@@ -73,8 +78,8 @@
     },
     {
       "path": "README.md",
-      "bytes": 17186,
-      "sha256": "a53b451c87668be7b111dcdb1814561fceef5af726acbb9a077d7ff6104d7193"
+      "bytes": 19178,
+      "sha256": "dd97c0470a64fdfad166b12160d02da908ef35efa2ecaa9582b810e9491067ae"
     },
     {
       "path": "README_V03_HISTORY.md",
@@ -84,12 +89,12 @@
     {
       "path": "rehab_pose/__init__.py",
       "bytes": 96,
-      "sha256": "4e290854c9eafcb2488237dfa3aa38e296520fc45fecf00be47d34fd3a2280f3"
+      "sha256": "8cdfe626304a2cc2d474d4a0435a180244f5ca8449a7150089ac6d5ab518bd20"
     },
     {
       "path": "rehab_pose/assessment.py",
-      "bytes": 8365,
-      "sha256": "c152d0c90cb321810629ae7bd46a0fa38d85a6bd3bcd26d7ef0744aef81ec0a3"
+      "bytes": 9931,
+      "sha256": "5af7a5d52736ad087a358442e4492a80e1dec2985986f4286834e9c26fdbfe5f"
     },
     {
       "path": "rehab_pose/assessment_extended.py",
@@ -97,9 +102,14 @@
       "sha256": "8478ffb10872bf51aecc92db5fadb25861bdebc8455181fef782de7537598e53"
     },
     {
+      "path": "rehab_pose/contract.py",
+      "bytes": 1254,
+      "sha256": "88490805708de9acb2a1b6cead81b2375db779acf998f8d7f8693fc877cf05a7"
+    },
+    {
       "path": "rehab_pose/core.py",
-      "bytes": 9478,
-      "sha256": "1bb92a36025959612b3896f5bbf6adbcb59d196167fbba6f0eceb021df91cdfe"
+      "bytes": 11975,
+      "sha256": "46ad8e42c4e4600442a2c1c8cf4e164a35d898768ce2342f1e82fc7dba778bff"
     },
     {
       "path": "rehab_pose/exercise_rules.py",
@@ -108,8 +118,8 @@
     },
     {
       "path": "rehab_pose/exercises.py",
-      "bytes": 4887,
-      "sha256": "208cdf67fc924ceda57d30b8f8079f71f8082d3034c4de629b5c74be26073c3e"
+      "bytes": 5724,
+      "sha256": "a0fa1e6fc3a5438386f5d4c759198775d70aeddd36a1999e9c2314ca4e26b58e"
     },
     {
       "path": "rehab_pose/leg_selection.py",
@@ -118,8 +128,8 @@
     },
     {
       "path": "rehab_pose/measures.py",
-      "bytes": 7963,
-      "sha256": "5b98f35314b81f97d2257c70359e93d7e6d07cb8de94bfc9bba0be433e19d144"
+      "bytes": 8428,
+      "sha256": "92538490e168d682fe733130d723a26f410fdb887aa092fe63d3759b74531289"
     },
     {
       "path": "rehab_pose/model.py",
@@ -128,13 +138,13 @@
     },
     {
       "path": "rehab_pose/run.py",
-      "bytes": 30164,
-      "sha256": "f50faa12027a0dbc67efa98f86ad71e3f228f70a015e6ea213390fc6cdc3eca3"
+      "bytes": 30782,
+      "sha256": "4b8907b78823e8d825e1040def3f12f0dbe9bb5ee7984cd2cf5f1d9e8190245d"
     },
     {
       "path": "rehab_pose/session.py",
       "bytes": 3485,
-      "sha256": "46eaca6bfd5a769699c0e5b7285b210e50fad744a910c0b6733d1695fb5c6ff2"
+      "sha256": "5e3057985231eba1780d5ea13b4fca2b5ac262c40604bc57ca2b9ac10cbd8f75"
     },
     {
       "path": "rehab_pose/subject.py",
@@ -173,18 +183,18 @@
     },
     {
       "path": "TEAM_START_HERE.md",
-      "bytes": 4222,
-      "sha256": "bced39dc5c9ccd97c6d19255eb5141b28893fcdc6a990df858fcb3cb3d7aa0f9"
+      "bytes": 4567,
+      "sha256": "20782cc4ca10af67dbad35948b2b590dc62718f8148c499af8884c8d5dfc483d"
     },
     {
       "path": "tests/test_adaptive_reference.py",
-      "bytes": 1785,
-      "sha256": "ad628bda2f879260e63f672714ecbb59d92d59372a18ed3aae2903e1a30e970d"
+      "bytes": 1850,
+      "sha256": "c8e4c531042f4c336d73070c5e7e74ec35e2ba57e6f206126b43669884733e01"
     },
     {
       "path": "tests/test_assessment.py",
-      "bytes": 2062,
-      "sha256": "a5335232820b165dec3976745d9dc21b9d8708cdd0cc28fd7a72f52f1d51a2da"
+      "bytes": 2091,
+      "sha256": "363fcb73a60ec6e9058377c52271cc5b3b43b5f0edfdde0c21f603e688fdadfd"
     },
     {
       "path": "tests/test_capture_quality.py",
@@ -192,9 +202,14 @@
       "sha256": "c51cb96df79d41a322bbc2abb6f45333bf55547061e5d1140951760f5f44aeb0"
     },
     {
+      "path": "tests/test_contract.py",
+      "bytes": 1101,
+      "sha256": "6a417c91a9a0caa2851f3e642981ce142da332e44ec420b717f9d1c6005641de"
+    },
+    {
       "path": "tests/test_core.py",
-      "bytes": 3484,
-      "sha256": "e3614a64f8d76f1ed5b7287fec3f4f795540ef6ab50f2152938a2e64fbbf672c"
+      "bytes": 5223,
+      "sha256": "b42b2563156230c4a19db37a4db2744259cf3fdb9cccce3924bb2afb40066048"
     },
     {
       "path": "tests/test_exercises_extended.py",
@@ -203,8 +218,8 @@
     },
     {
       "path": "tests/test_feedback_fix.py",
-      "bytes": 1906,
-      "sha256": "cb51eb0b23671ea6e63f82eab3899acc273f85912360ba4b070a08a05c22fb22"
+      "bytes": 2036,
+      "sha256": "7dc3ff33c6b9e582a46a5fb8df159e5fe451347b4921b63131fe88673c5a20ab"
     },
     {
       "path": "tests/test_occlusion.py",
@@ -213,8 +228,8 @@
     },
     {
       "path": "tests/test_recorded_regression.py",
-      "bytes": 1542,
-      "sha256": "7cd9e105761a3d1afefcb8b47e61597ebb3c3ab735a4083f81f859620b62bc62"
+      "bytes": 1625,
+      "sha256": "558e2256634e9ca274a9205055a6bebc044373257805dae48d47b48034ef57bf"
     },
     {
       "path": "tests/test_session.py",
@@ -253,3 +268,4 @@
     }
   ]
 }
+

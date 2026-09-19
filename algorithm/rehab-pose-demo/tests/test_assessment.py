@@ -6,7 +6,7 @@ class AssessmentTests(unittest.TestCase):
     def fixture(self):
         summary = {'exercise':'SEATED_KNEE_EXTENSION', 'calibrations':[{}],
                    'effective_parameters':{'target_deg':160, 'min_hold_s':2, 'min_return_s':1, 'max_gap_s':.3},
-                   'repetitions':[{'index':1,'start_s':0,'end_s':.4,'target_hold_s':.5,'return_s':1.2}],
+                   'repetitions':[{'index':1,'start_s':0,'end_s':.4,'time_to_target_s':1.1,'target_hold_s':.5,'return_s':1.2}],
                    'interrupted_attempts':[]}
         rows = [{'timestamp_s':t, 'visible':True, 'measurement_source':'observed',
                  'measurement_metrics':{'knee_included_deg':a}}
@@ -16,7 +16,7 @@ class AssessmentTests(unittest.TestCase):
     def test_complete_checks_and_excursion(self):
         s,r=self.fixture(); item=assess(s,r)['attempts'][0]
         self.assertEqual(item['measurements']['observed_excursion_deg'],70)
-        self.assertEqual([c['status'] for c in item['checks']],['met','not_met','met'])
+        self.assertEqual([c['status'] for c in item['checks']],['met','not_met','met','met'])
 
     def test_prediction_cannot_be_used_to_pass(self):
         s,r=self.fixture(); r[1]['bridge_pending']=True
@@ -39,3 +39,4 @@ class AssessmentTests(unittest.TestCase):
         report=assess(s,r)
         self.assertFalse(report['supported'])
         self.assertTrue(all(c['target_min'] is None for c in report['attempts'][0]['checks']))
+

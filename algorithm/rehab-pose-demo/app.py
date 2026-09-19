@@ -27,7 +27,7 @@ class App:
         self.process=None
         self.messages=queue.Queue()
         self.latest=None
-        root.title("康复训练视觉演示 v0.6 · 四动作评估")
+        root.title("康复训练视觉演示 v0.7 · 动作1量化标准")
         root.geometry("900x850")
         root.minsize(800,840)
         frame=ttk.Frame(root,padding=24)
@@ -61,8 +61,8 @@ class App:
         ttk.Combobox(options,textvariable=self.facing,values=['画面左侧','画面右侧'],state='readonly',width=26).grid(row=4,column=1,columnspan=3,sticky='w',pady=(10,0))
         planbox=ttk.LabelFrame(frame,text='本次训练计划（动作2/6/8为实验规则，非临床处方）',padding=6)
         planbox.pack(fill='x',pady=(10,0))
-        self.plan_sets=tk.StringVar(value='3');self.plan_reps=tk.StringVar(value='10');self.plan_hold=tk.StringVar(value='2')
-        for column,(label,var,values) in enumerate([('组数',self.plan_sets,['3','4','5']),('每组次数',self.plan_reps,['10','11','12','13','14','15']),('保持秒数',self.plan_hold,['2','2.5','3'])]):
+        self.plan_sets=tk.StringVar(value='3');self.plan_reps=tk.StringVar(value='10');self.plan_hold=tk.StringVar(value='5')
+        for column,(label,var,values) in enumerate([('组数',self.plan_sets,['3','4','5']),('每组次数',self.plan_reps,['10','11','12','13','14','15']),('保持秒数',self.plan_hold,['5','2','2.5','3'])]):
             ttk.Label(planbox,text=label).grid(row=0,column=column*2,padx=4)
             if var is self.plan_reps:
                 self.reps_entry=ttk.Entry(planbox,textvariable=var,width=7)
@@ -107,7 +107,7 @@ class App:
         self.launch(["--camera",self.camera.get()])
 
     def exercise_changed(self,*args):
-        values={'1':['2','2.5','3'],'2':['5'],'6':['0'],'8':['0']}[self.exercise.get()[0]]
+        values={'1':['5','2','2.5','3'],'2':['5'],'6':['0'],'8':['0']}[self.exercise.get()[0]]
         self.hold_selector.configure(values=values)
         self.plan_hold.set(values[0])
 
@@ -202,6 +202,8 @@ class App:
                 if summary.exists():
                     data=json.loads(summary.read_text(encoding="utf-8"))
                     self.append(f"完整动作次数：{data['completed_reps']}；可靠帧：{data['reliable_frames']}/{data['frames']}")
+                    if data.get('exercise')=='SEATED_KNEE_EXTENSION':
+                        self.append(f"达到目标角度并保持达标：{data.get('target_completed_reps',0)}次")
                     self.append(str(self.latest))
         self.root.after(100,self.poll)
 
@@ -224,3 +226,4 @@ if __name__=="__main__":
     root=tk.Tk()
     App(root)
     root.mainloop()
+
