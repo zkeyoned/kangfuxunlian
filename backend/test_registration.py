@@ -3,6 +3,8 @@ import os
 import sys
 import tempfile
 import unittest
+import logging
+from contextlib import closing
 from pathlib import Path
 
 _temp = tempfile.TemporaryDirectory()
@@ -23,6 +25,11 @@ class RegistrationTest(unittest.TestCase):
         return self.client.post("/api/v1/auth/register", json={
             "username": username, "password": "test-only-1234", "display_name": "测试患者", "role": "patient", **overrides})
 
+    @classmethod
+    def tearDownClass(cls):
+        cls.client.close()
+        logging.shutdown()
+
     def test_register_login_persistence_and_isolation(self):
         r = self.register(" Fresh@Example.test ")
         self.assertEqual(r.status_code, 201, r.text)
@@ -32,7 +39,7 @@ class RegistrationTest(unittest.TestCase):
         headers = {"Authorization": "Bearer " + r.json()["token"]}
         self.assertEqual(self.client.get("/api/v1/auth/me", headers=headers).json()["id"], user["id"])
         self.assertEqual(self.client.get("/api/v1/me/plan/today", headers=headers).json()["items"], [])
-        with db.connect() as con:
+        with closing(db.connect()) as con, con:
             saved = con.execute("SELECT * FROM users WHERE id=?", (user["id"],)).fetchone()
             self.assertTrue(db.verify_password("test-only-1234", saved["password_hash"]))
             self.assertNotEqual(saved["password_hash"], "test-only-1234")
@@ -46,10 +53,10 @@ class RegistrationTest(unittest.TestCase):
 
     def test_duplicate_is_atomic(self):
         self.assertEqual(self.register("dup@example.test").status_code, 201)
-        with db.connect() as con:
+        with closing(db.connect()) as con, con:
             before = con.execute("SELECT COUNT(*) FROM institutions").fetchone()[0]
         self.assertEqual(self.register("DUP@example.test").status_code, 409)
-        with db.connect() as con:
+        with closing(db.connect()) as con, con:
             self.assertEqual(con.execute("SELECT COUNT(*) FROM institutions").fetchone()[0], before)
 
     def test_validation_and_no_self_elevation(self):
