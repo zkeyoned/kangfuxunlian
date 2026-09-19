@@ -63,3 +63,9 @@ python3 tests/test_api.py
 契约 G 节及迁移 003 支持报告关联录像。录像实际字节分块存入 SQLite，单块 1 MiB、单条不超过 256 MiB。只有完整长度及 SHA256 校验通过才可播放，每次访问核验患者或当前关联康复师权限。`python backend/test_report_videos.py` 在隔离库验证。
 
 外置前端录制无声原始视频，训练结束先保存报告再上传录像。上传失败保留 IndexedDB 副本，可重试。旧报告没有录像时显示无录像。浏览器不支持录制时仅保存报告；视觉会话丢失且未生成报告的本地录像目前不会自动入库。真实摄像头录制和浏览器解码仍需现场联调，二进制接口测试不替代此项。备份数据库会包含录像，不能提交 Git。
+
+## 视觉方案同步
+
+visual_prescriptions.py / 004 迁移提供契约H接口。已关联康复师保存草稿或发布不可变版本，患者读取最新发布版。后续解除关联会使旧作者方案不再下发。组次允许患者本次自主调整，报告内保留方案快照与实际选择。参数是技术校验范围，临床适用性待康复师确认。
+
+运行 python backend/test_visual_prescriptions.py 与 python backend/test_plan_parameters.py。实时桥接部署说明见 algorithm/integration/README.md；前端独立文件也必须同步更新。

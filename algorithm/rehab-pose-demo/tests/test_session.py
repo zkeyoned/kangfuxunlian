@@ -25,8 +25,14 @@ class SessionTests(unittest.TestCase):
         s.record_rep(1,{'index':1});self.assertEqual(s.total,1)
         s.toggle_pause(2);s.record_rep(3,{'index':2});self.assertEqual(s.total,1)
 
+    def test_custom_hold_and_rest(self):
+        s=TrainingSession(TrainingPlan(2,1,4,45));s.record_rep(0,{"index":1})
+        s.tick(44);self.assertEqual(s.status,"resting")
+        s.tick(45);self.assertEqual(s.status,"training")
+        self.assertEqual(s.plan.hold_s,4)
+
     def test_invalid_plan(self):
-        for args in [(0,10,2),(3,0,2),(3,10,1),(3,10,float('nan')),(True,10,2)]:
+        for args in [(0,10,2),(3,0,2),(3,10,31),(3,10,float('nan')),(True,10,2)]:
             with self.assertRaises(ValueError):TrainingPlan(*args)
 
     def test_nonqualified_cycle_counts_as_performed(self):
