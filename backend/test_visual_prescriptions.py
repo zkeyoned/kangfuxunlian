@@ -31,5 +31,16 @@ class PlanTests(ReportTests):
         self.assertEqual(self.c.get(path,headers=self.th).status_code,403)
         with closing(db.connect()) as con,con:con.execute('UPDATE patients SET therapist_id=? WHERE id=?',(tid,self.pid))
 
-if __name__=='__main__':unittest.main(defaultTest='PlanTests')
 
+
+
+    def test_slr_surface_rule_version_roundtrip(self):
+        body={'status':'published','title':'动作2候选','side':'left','phase':'测试','days_per_week':1,
+              'items':[{'exercise_id':'supine','rule_version':'slr_v0.1_surface','sets':1,'reps':3,'target_deg':30,'hold_s':5,'return_s':1,'rest_s':30}]}
+        r=self.c.post(f'/api/v1/patients/{self.pid}/visual-prescription',headers=self.th,json=body)
+        self.assertEqual(r.status_code,200,r.text)
+        actual=self.c.get('/api/v1/me/visual-prescription',headers=self.ph).json()['prescription']
+        self.assertEqual(actual['items'][0]['rule_version'],'slr_v0.1_surface')
+        self.assertEqual(actual['items'][0]['hold_s'],5)
+
+if __name__=='__main__':unittest.main(defaultTest='PlanTests')

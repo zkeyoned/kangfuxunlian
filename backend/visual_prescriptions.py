@@ -8,6 +8,7 @@ from plan_parameters import validate_targets
 class Item(BaseModel):
     model_config=ConfigDict(extra='forbid')
     exercise_id:Literal['seated','supine','squat','stand']
+    rule_version:Literal['slr_v0.1_surface']|None=None
     sets:int=Field(ge=1,le=20,strict=True)
     reps:int=Field(ge=1,le=100,strict=True)
     target_deg:float
