@@ -53,4 +53,14 @@ class PlanTests(ReportTests):
         self.assertEqual(actual['items'][0]['rule_version'],'sts_v0.1_dual_baseline')
         self.assertEqual(actual['items'][0]['hold_s'],1)
 
+    def test_squat_joint_rule_version_roundtrip(self):
+        body={'status':'published','title':'微蹲候选','side':'left','phase':'测试','days_per_week':1,
+              'items':[{'exercise_id':'squat','rule_version':'squat_v0.1_joint','sets':1,'reps':3,'target_deg':30,'hold_s':1,'return_s':1,'rest_s':30}]}
+        r=self.c.post(f'/api/v1/patients/{self.pid}/visual-prescription',headers=self.th,json=body)
+        self.assertEqual(r.status_code,200,r.text)
+        actual=self.c.get('/api/v1/me/visual-prescription',headers=self.ph).json()['prescription']
+        self.assertEqual(actual['items'][0]['rule_version'],'squat_v0.1_joint')
+        self.assertEqual(actual['items'][0]['target_deg'],30)
+        self.assertEqual(actual['items'][0]['hold_s'],1)
+
 if __name__=='__main__':unittest.main(defaultTest='PlanTests')
