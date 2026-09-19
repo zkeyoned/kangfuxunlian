@@ -4,6 +4,7 @@ from typing import Literal
 from fastapi import Depends, HTTPException, Query
 from pydantic import BaseModel, Field
 import db
+from report_videos import video_meta
 
 
 class ReportInput(BaseModel):
@@ -61,6 +62,7 @@ def install_routes(app,get_con,current_user,patient_in_scope):
         delivery={'status':'available' if t else 'unlinked','therapist_name':t['display_name'] if t else None,'read_at':read}
         out={k:row[k] for k in ('id','client_id','patient_id','exercise_id','created_at')}
         out.update(patient_name=p['display_name'],brief_report=result['brief_report'],delivery=delivery,read_at=read)
+        out['video']=video_meta(con,row['id'])
         if full:out['result']=result
         return out
 
@@ -86,12 +88,15 @@ def install_routes(app,get_con,current_user,patient_in_scope):
             return pack(con,db.one(con.execute('SELECT * FROM training_reports WHERE id=?',(rid,))),True)
 
     @app.get('/api/v1/training-reports')
-    def listing(limit:int=Query(50,ge=1,le=100),user=Depends(current_user),con=Depends(get_con)):
+    def listing(limit:int=Query(50,ge=1,le=100),patient_id:int|None=None,user=Depends(current_user),con=Depends(get_con)):
         if user['role']=='patient':scope,value='p.user_id',user['id']
         elif user['role']=='therapist':scope,value='p.therapist_id',user['id']
         elif user['role']=='admin':scope,value='p.institution_id',user['institution_id']
         else:raise HTTPException(403,'无权读取报告')
-        rows=[dict(r) for r in con.execute(f'SELECT r.* FROM training_reports r JOIN patients p ON p.id=r.patient_id WHERE {scope}=? ORDER BY r.id DESC LIMIT ?',(value,limit))]
+        extra='';params=[value]
+        if patient_id is not None:
+            patient_in_scope(con,user,patient_id);extra=' AND p.id=?';params.append(patient_id)
+        rows=[dict(r) for r in con.execute(f'SELECT r.* FROM training_reports r JOIN patients p ON p.id=r.patient_id WHERE {scope}=?{extra} ORDER BY r.id DESC LIMIT ?',(*params,limit))]
         return {'reports':[pack(con,row) for row in rows]}
 
     @app.get('/api/v1/training-reports/{rid}')
