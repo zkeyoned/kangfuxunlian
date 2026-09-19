@@ -8,7 +8,7 @@
 用法：
     python3 database/import_results.py <results目录> --patient-id 1 \\
         [--plan-id 1] [--plan-item-id 1] [--db data/rehabtrack.sqlite3] [--dry-run] \\
-        [--score-mode none|contract-d]
+        [--score-mode none|contract-d] [--strict]
 
 <results目录> 是原型 rehab_pose.run 每次运行产出的那个目录（如 results/20260918_231045_123456/），
 必须包含 summary.json 和 frames.jsonl；assessment.json 可选，缺失时只是少落一列 checks_json。
@@ -27,6 +27,16 @@ COMPENSATION_FLAG 几个常量和各函数的注释里，不要在这个脚本�
 标 provisional；--score-mode contract-d 才按接口契约 D 节公式现算，仅供联调对比，不代表这个公式
 已经拍板。原型的逐条提示事件（feedback_events）原样落进新表 session_events，供以后回放或做别的
 判定逻辑用，不因为这次不拿它算分就丢掉。
+
+20260919 按队友（后端与视觉算法）审查意见修正四处，细节见 docs/decisions/0002：
+1. compensation_count 口径统一为「每次动作内、非速度类、按提示代号去重的类型数，再按组求和」，
+   同一次动作里同一个提示出现两次只算一次（session_events 里仍然逐条保留）。
+2. 一次动作都没完成也落一条 session_item（reps_done=0 / reps_valid=0 / low_confidence=1 /
+   needs_review=1 / quality_score=NULL），事件、标定、中断的尝试都挂在它下面，不再整段丢掉。
+3. capture_quality 的分母改成这一组的整个时间跨度（含标定、中断的尝试），旧口径的值另存进
+   measurement_angle_json 的 capture_quality_completed_reps 供对比。
+4. 未知的 summary.status 默认按 aborted 落库并标 needs_review=1、打 warning；
+   加 --strict 时直接拒绝导入（非零退出码）。
 """
 from __future__ import annotations
 
@@ -235,6 +245,28 @@ def rep_flags(events: list) -> list[str]:
     return flags
 
 
+def rep_compensation_codes(events: list) -> list[str]:
+    """一次动作内的代偿类提示代号，按**代号**去重（20260919 按审查意见统一口径）。
+
+    口径一句话：compensation_count = 每次动作内、非速度类（不含 too_fast 类）、按提示代号
+    去重后的类型数，再按组求和。同一次动作里 TRUNK_FORWARD 提示两次只算一次（session_events
+    表里仍然是两条，逐条记录不受影响），换成冷却时间更短的参数也不会把这个数刷上去。
+
+    只统计能映射到契约代偿类 flag 的代号（COMPENSATION_FLAG）：
+    AMPLITUDE_BELOW_TARGET / HOLD_TOO_SHORT / RETURN_TOO_FAST 是"这一次没达标"的完成判定提示，
+    不是代偿；SLR_TOO_HIGH / SQUAT_TOO_DEEP 契约六个 flags 里没有对应语义，见
+    docs/decisions/0002 的「待确认」第 4 条，要不要计入等常/陈确认。
+    """
+    codes = []
+    for e in events:
+        code = e.get("code")
+        if not code or code in TOO_FAST_CODES or code not in COMPENSATION_FLAG:
+            continue
+        if code not in codes:
+            codes.append(code)
+    return codes
+
+
 def rep_is_valid(rep: dict, events: list) -> bool:
     """reps_valid 只按幅度达标 + 没有 too_fast 类事件判（已拍板，"无提醒"不等于"合格"）。"""
     amplitude_met = bool((rep.get("target_comparison") or {}).get("amplitude_met"))
@@ -250,19 +282,90 @@ def frames_in_window(rows: list, start_s: float, end_s: float):
     return [r for r in rows if start_s <= r.get("timestamp_s", -1) <= end_s]
 
 
-def compute_capture_quality(rows: list, reps: list):
-    """可见帧 / 总帧，取各 rep 时间窗并集内的帧（不含组间休息时段）。"""
-    frames = []
-    for rep in reps:
-        frames.extend(frames_in_window(rows, rep["start_s"], rep["end_s"]))
+def _observed_ratio(frames):
     if not frames:
         return None
     observed = sum(1 for r in frames if r.get("visible") and not r.get("bridge_pending"))
     return observed / len(frames)
 
 
-def compute_measurement_angle_json(rows: list, reps: list):
-    """二维测量角度参考值：组内可信观测帧的 knee_included_deg 范围，不与 peak_angle_max 混用。"""
+def compute_capture_quality(rows, span):
+    """可见帧 / 总帧。分母取这一组的**整个时间跨度**内的所有帧（20260919 按审查意见修正）。
+
+    口径：从这一组的首次尝试或标定开始，到这一组结束，中间标定失败、识别中断、幅度不足
+    这些没能成为一次动作的时间段全部进分母；这一组一次动作都没完成时，跨度取整段录制。
+    旧口径只统计已完成动作时间窗内的帧，等于把"根本没拍到人"的时间从分母里摘出去，
+    算出来的拍摄质量偏高。旧口径的值另存进 measurement_angle_json 的
+    capture_quality_completed_reps 一键，供对比，不再写进 session_items.capture_quality。
+    """
+    if not span:
+        return None
+    return _observed_ratio(frames_in_window(rows, span[0], span[1]))
+
+
+def compute_capture_quality_completed_reps(rows, reps):
+    """旧口径：只取各 rep 时间窗并集内的帧（不含组间休息、不含中断的尝试）。只作对比用。"""
+    frames = []
+    for rep in reps:
+        frames.extend(frames_in_window(rows, rep["start_s"], rep["end_s"]))
+    return _observed_ratio(frames)
+
+
+def recording_span(rows):
+    """整段录制的时间跨度（第一帧到最后一帧的 timestamp_s）。"""
+    stamps = [r.get("timestamp_s") for r in rows if r.get("timestamp_s") is not None]
+    if not stamps:
+        return None
+    return (min(stamps), max(stamps))
+
+
+def group_extents(groups):
+    """各组已完成动作的外包络 [首个 rep.start_s, 末个 rep.end_s]。"""
+    return {set_index: (min(r["start_s"] for r in reps), max(r["end_s"] for r in reps))
+            for set_index, reps in groups.items()}
+
+
+def nearest_group(t, extents):
+    """离哪一组的外包络近就算哪一组，距离相同时归 set_index 较小的组（和事件归属同一套规则）。"""
+    return min(extents, key=lambda k: (_event_distance(t, extents[k]), k))
+
+
+def compute_group_spans(groups, summary, rows):
+    """每组 capture_quality 分母用的「整个时间跨度」。
+
+    先用已完成动作的外包络打底，再把中断的尝试（summary.interrupted_attempts，原型里
+    幅度不足/识别中断的那些）和标定（summary.calibrations[].captured_at_s）按就近规则
+    补进对应的组，向前扩起点、向后扩终点。组数为 0（一次动作都没完成）时返回空字典，
+    由调用方改用整段录制 recording_span(rows)。
+    """
+    if not groups:
+        return {}
+    extents = group_extents(groups)
+    spans = {set_index: [start, end] for set_index, (start, end) in extents.items()}
+    marks = []
+    for attempt in summary.get("interrupted_attempts") or []:
+        start = attempt.get("start_s")
+        if start is None:
+            continue
+        end = attempt.get("end_s")
+        marks.append((start, end if end is not None else start))
+    for calibration in summary.get("calibrations") or []:
+        t = calibration.get("captured_at_s")
+        if t is not None:
+            marks.append((t, t))
+    for start, end in marks:
+        set_index = nearest_group(start, extents)
+        spans[set_index][0] = min(spans[set_index][0], start)
+        spans[set_index][1] = max(spans[set_index][1], end)
+    return {set_index: (start, end) for set_index, (start, end) in spans.items()}
+
+
+def compute_measurement_angle_json(rows, reps, capture_quality_completed_reps=None):
+    """二维测量角度参考值：组内可信观测帧的 knee_included_deg 范围，不与 peak_angle_max 混用。
+
+    另外带一个 capture_quality_completed_reps：旧口径（只算已完成动作时间窗内的帧）的拍摄
+    质量，供和新口径 session_items.capture_quality（整个时间跨度做分母）对比，见 docs/02。
+    """
     values = []
     frame_count = 0
     for rep in reps:
@@ -275,31 +378,52 @@ def compute_measurement_angle_json(rows: list, reps: list):
                 continue
             frame_count += 1
             values.append(v)
-    if not values:
-        return None
-    return json.dumps({
-        "observed_knee_min_deg": min(values),
-        "observed_knee_max_deg": max(values),
-        "observed_frame_count": frame_count,
-    }, ensure_ascii=False)
+    out = {}
+    if values:
+        out["observed_knee_min_deg"] = min(values)
+        out["observed_knee_max_deg"] = max(values)
+        out["observed_frame_count"] = frame_count
+    if capture_quality_completed_reps is not None:
+        out["capture_quality_completed_reps"] = capture_quality_completed_reps
+    return json.dumps(out, ensure_ascii=False) if out else None
 
 
-def compute_calibration_json(summary: dict, reps: list):
-    """标定信息保留：取最后一个 rep 开始前最近一次标定基线，原样保留。"""
+def compute_calibration_json(summary: dict, reps: list, span=None):
+    """标定信息保留：取最后一个 rep 开始前最近一次标定基线，原样保留。
+
+    20260919 按审查意见修正：这一组一次动作都没完成（reps 为空）时，退而取该组时间跨度内
+    最后一次标定，照样落库——标定本身就是"尝试过"的证据，不能因为没数出动作就丢掉。
+    """
     calibrations = summary.get("calibrations") or []
-    if not calibrations or not reps:
+    if not calibrations:
         return None
-    last_start = reps[-1]["start_s"]
-    candidates = [c for c in calibrations if c.get("captured_at_s") is not None and c["captured_at_s"] <= last_start]
-    chosen = candidates[-1] if candidates else calibrations[0]
+    if reps:
+        cutoff = reps[-1]["start_s"]
+    elif span:
+        cutoff = span[1]
+    else:
+        cutoff = None
+    if cutoff is None:
+        chosen = calibrations[-1]
+    else:
+        candidates = [c for c in calibrations
+                      if c.get("captured_at_s") is not None and c["captured_at_s"] <= cutoff]
+        chosen = candidates[-1] if candidates else calibrations[0]
     return json.dumps(chosen, ensure_ascii=False)
 
 
-def compute_checks_json(assessment: dict | None, reps: list):
+def compute_checks_json(assessment: dict | None, reps: list, span=None):
+    """已完成动作：按原型 repetitions[].index（全局序号）建 key，值是 assessment 的逐项判定。
+
+    20260919 按审查意见修正：这一组一次动作都没完成（reps 为空）时，把该组时间跨度内的中断
+    尝试（assessment.attempts 里 completed=false 的那些，带 interruption_reason）放在
+    interrupted_attempts 这个 key 下照样落库，不让"尝试了但一次没完成"的训练信息丢掉。
+    """
     if not assessment:
         return None
+    attempts = assessment.get("attempts", [])
     by_index = {}
-    for attempt in assessment.get("attempts", []):
+    for attempt in attempts:
         idx = attempt.get("completed_rep_index")
         if idx is not None:
             by_index[idx] = attempt.get("checks")
@@ -308,6 +432,24 @@ def compute_checks_json(assessment: dict | None, reps: list):
         idx = rep.get("index")
         if idx in by_index and by_index[idx] is not None:
             out[str(idx)] = by_index[idx]
+    if not reps:
+        interrupted = []
+        for attempt in attempts:
+            if attempt.get("completed"):
+                continue
+            start = attempt.get("start_s")
+            if span and start is not None and not (span[0] <= start <= span[1]):
+                continue
+            interrupted.append({
+                "attempt": attempt.get("attempt"),
+                "start_s": start,
+                "end_s": attempt.get("end_s"),
+                "interruption_reason": attempt.get("interruption_reason"),
+                "status": attempt.get("status"),
+                "checks": attempt.get("checks"),
+            })
+        if interrupted:
+            out["interrupted_attempts"] = interrupted
     return json.dumps(out, ensure_ascii=False) if out else None
 
 
@@ -337,7 +479,8 @@ def clamp01(x):
 
 
 def compute_provisional_breakdown(*, reps_valid, reps_target, reps_done, peak_angle_max, rest_angle,
-                                   target_angle, compensation_count, too_fast_count, capture_quality):
+                                   target_angle, compensation_count, too_fast_count, capture_quality,
+                                   capture_quality_completed_reps=None):
     """默认（--score-mode 不传，即 'none'）的 score_breakdown_json：只存各维度的原始输入，
     不折算成 0-100 分，quality_score 这一列对应留 NULL。
 
@@ -356,6 +499,7 @@ def compute_provisional_breakdown(*, reps_valid, reps_target, reps_done, peak_an
         "compensation_event_count": compensation_count,
         "too_fast_event_count": too_fast_count,
         "capture_quality": capture_quality,
+        "capture_quality_completed_reps": capture_quality_completed_reps,
         "provisional": True,
         "reason": "评分口径待常/陈确认：提示有冷却时间、识别不到不等于动作正确，"
                   "保持不足/无法判断如何处理仍需共同确定，见 docs/decisions/0002",
@@ -487,7 +631,21 @@ def already_imported(con: sqlite3.Connection, import_key: str):
 # 主流程
 # ---------------------------------------------------------------------------
 
-def build_session_item(*, exercise_code, set_index, reps, rows, summary, assessment, training_session, score_mode="none"):
+def build_session_item(*, exercise_code, set_index, reps, rows, summary, assessment, training_session,
+                       score_mode="none", span=None, status_unknown=False):
+    """把一组（training_set）算成一条 session_items 记录。
+
+    20260919 按审查意见修正两处：
+    1. reps 为空（这一组一次动作都没完成：识别中断、幅度不足、遮挡）时照样产出一条
+       session_items，reps_done=0 / reps_valid=0 / low_confidence=1 / needs_review=1 /
+       quality_score=NULL，checks_json（中断的尝试）与 calibration_json 照存，逐条提示事件
+       仍旧挂在这条 item 下面（rep_index 为空）。以前这种情况直接没有 session_item，
+       "患者试了很多次但一次没完成"这段训练信息整段丢掉。
+    2. capture_quality 的分母改成这一组的整个时间跨度（参数 span），不再只算已完成动作的
+       时间窗，旧口径的值另存进 measurement_angle_json / score_breakdown_json 的
+       capture_quality_completed_reps 供对比。
+    status_unknown=True（summary.status 不在已知映射表里）时，这一组一并标 needs_review=1。
+    """
     feedback_events = summary.get("feedback_events", [])
     effective_parameters = summary.get("effective_parameters") or summary.get("configuration") or {}
     rest_angle, target_angle = rest_target_angles(exercise_code, effective_parameters)
@@ -511,7 +669,9 @@ def build_session_item(*, exercise_code, set_index, reps, rows, summary, assessm
             reps_valid_count += 1
         if "too_fast" in flags:
             too_fast_count += 1
-        compensation_count += sum(1 for f in flags if f != "too_fast")
+        # 口径（20260919 按审查意见统一）：每次动作内、非速度类、按提示代号去重后的类型数，
+        # 再按组求和。同一次动作里同一个提示出现两次只算一次，见 rep_compensation_codes。
+        compensation_count += len(rep_compensation_codes(events))
         needs_review = bool(rep.get("needs_review"))
         any_needs_review = any_needs_review or needs_review
         rep_rows.append({
@@ -527,15 +687,36 @@ def build_session_item(*, exercise_code, set_index, reps, rows, summary, assessm
         })
 
     reps_done = len(reps)
+    zero_completed_reps = reps_done == 0
     peaks = [primary_peak(exercise_code, r) for r in reps]
     peaks = [p for p in peaks if p is not None]
     peak_angle_max = max(peaks) if peaks else None
     peak_angle_mean = statistics.fmean(peaks) if peaks else None
     duration_ms = sum(rr["duration_ms"] for rr in rep_rows)
-    capture_quality = compute_capture_quality(rows, reps)
-    low_confidence = bool(capture_quality is not None and capture_quality < 0.6)
+    capture_quality = compute_capture_quality(rows, span)
+    capture_quality_completed_reps = compute_capture_quality_completed_reps(rows, reps)
+    # 一次都没完成的组一律算"这组测不准"，不管算出来的可见率是多少。
+    low_confidence = zero_completed_reps or bool(capture_quality is not None and capture_quality < 0.6)
 
-    if score_mode == "contract-d":
+    if zero_completed_reps:
+        # 一次动作都没完成：不给分（契约 D 节的完成度/幅度/姿态/节奏几个维度全都没有分母），
+        # 只把原始输入和"为什么没分"记下来，留给康复师人工看。
+        quality_score = None
+        score_breakdown = compute_provisional_breakdown(
+            reps_valid=reps_valid_count, reps_target=reps_target, reps_done=reps_done,
+            peak_angle_max=peak_angle_max, rest_angle=rest_angle, target_angle=target_angle,
+            compensation_count=compensation_count, too_fast_count=too_fast_count,
+            capture_quality=capture_quality,
+            capture_quality_completed_reps=capture_quality_completed_reps,
+        )
+        score_breakdown["zero_completed_reps"] = True
+        score_breakdown["reason"] = (
+            "这一组一次动作都没完成（识别中断/幅度不足/遮挡），不计分，需人工复核；"
+            + score_breakdown["reason"]
+        )
+        if score_mode == "contract-d":
+            score_breakdown["score_mode"] = "contract-d_skipped_zero_reps"
+    elif score_mode == "contract-d":
         quality_score, score_breakdown = compute_contract_d_score(
             reps_valid=reps_valid_count, reps_target=reps_target, reps_done=reps_done,
             peak_angle_max=peak_angle_max, rest_angle=rest_angle, target_angle=target_angle,
@@ -549,6 +730,7 @@ def build_session_item(*, exercise_code, set_index, reps, rows, summary, assessm
             peak_angle_max=peak_angle_max, rest_angle=rest_angle, target_angle=target_angle,
             compensation_count=compensation_count, too_fast_count=too_fast_count,
             capture_quality=capture_quality,
+            capture_quality_completed_reps=capture_quality_completed_reps,
         )
 
     item = {
@@ -566,10 +748,12 @@ def build_session_item(*, exercise_code, set_index, reps, rows, summary, assessm
         "capture_quality": capture_quality,
         "low_confidence": 1 if low_confidence else 0,
         "angle_trace_json": compute_angle_trace(rows, reps, exercise_code),
-        "checks_json": compute_checks_json(assessment, reps),
-        "measurement_angle_json": compute_measurement_angle_json(rows, reps),
-        "calibration_json": compute_calibration_json(summary, reps),
-        "needs_review": 1 if any_needs_review else 0,
+        "checks_json": compute_checks_json(assessment, reps, span),
+        "measurement_angle_json": compute_measurement_angle_json(
+            rows, reps, capture_quality_completed_reps),
+        "calibration_json": compute_calibration_json(summary, reps, span),
+        # 零完成组、status 未知这两种情况都要人工看一眼，一并标 needs_review。
+        "needs_review": 1 if (any_needs_review or zero_completed_reps or status_unknown) else 0,
     }
     return item, rep_rows
 
@@ -596,7 +780,8 @@ def compute_angle_trace(rows: list, reps: list, exercise_code: str, step_s: floa
 
 
 def import_run(directory: Path, *, patient_id: int, plan_id, plan_item_id, db_path: Path, dry_run: bool,
-                score_mode: str = "none"):
+                score_mode: str = "none", strict: bool = False):
+    """导入一个结果目录。strict=True 时遇到未知的 summary.status 直接拒绝导入（抛 ImportError_）。"""
     summary, rows, assessment = load_run(directory)
     status = summary.get("status")
     if status in SKIP_STATUS:
@@ -604,13 +789,34 @@ def import_run(directory: Path, *, patient_id: int, plan_id, plan_item_id, db_pa
         return None
     exercise_name, exercise_code = resolve_exercise(summary, rows)
     started_at, ended_at, started_at_source, import_key = resolve_timing(summary, rows, directory)
-    schema_status = STATUS_MAP.get(status, "finished")
-    if status not in STATUS_MAP:
-        print(f"[提示] summary.status={status!r} 不在已知映射表里，按 finished 处理，去核对一下")
+    # 20260919 按审查意见修正：未知 status 不再乐观地按 finished 处理。原型加一个新状态、
+    # 或者跑崩了只写了半个 summary，都会落到这里，按 finished 存等于把"没跑完"当成"跑完了"。
+    # 现在默认按 aborted 存并给所有组打 needs_review=1；--strict 时直接拒绝导入。
+    status_unknown = status not in STATUS_MAP
+    if status_unknown:
+        message = (f"summary.status={status!r} 不在已知映射表里（{sorted(STATUS_MAP)}），"
+                   f"来源：{directory}")
+        if strict:
+            raise ImportError_(message + "；--strict 已开，拒绝导入，先去确认这个状态该怎么映射")
+        print(f"[警告] {message}；按 aborted 落库并把这次导入的所有组标 needs_review=1，去核对一下")
+    schema_status = STATUS_MAP.get(status, "aborted")
 
     groups = group_repetitions(summary)
     training_session = summary.get("training_session")
     event_groups = assign_events_to_groups(summary.get("feedback_events", []), groups)
+    spans = compute_group_spans(groups, summary, rows)
+    if not groups:
+        # 20260919 按审查意见修正：一次动作都没完成也要落一条 session_item，
+        # 把这段"尝试过但没数出动作"的录制留在库里（事件、标定、中断的尝试都挂在它下面）。
+        zero_set_index = 1
+        progress = (training_session or {}).get("progress") or {}
+        if isinstance(progress.get("current_set"), int) and progress["current_set"] >= 1:
+            zero_set_index = progress["current_set"]
+        groups = {zero_set_index: []}
+        spans = {zero_set_index: recording_span(rows)}
+        event_groups = {zero_set_index: summary.get("feedback_events", [])}
+        print(f"[提示] 没有任何一次完成的动作，仍按第{zero_set_index}组落一条 session_item"
+              f"（reps_done=0，needs_review=1）：{directory}")
 
     algorithm_version = summary.get("algorithm_version")
     rule_snapshot = {
@@ -640,7 +846,7 @@ def import_run(directory: Path, *, patient_id: int, plan_id, plan_item_id, db_pa
             item, rep_rows = build_session_item(
                 exercise_code=exercise_code, set_index=set_index, reps=reps, rows=rows,
                 summary=summary, assessment=assessment, training_session=training_session,
-                score_mode=score_mode,
+                score_mode=score_mode, span=spans.get(set_index), status_unknown=status_unknown,
             )
             event_rows = build_session_events(event_groups.get(set_index, []), reps)
             items.append((item, rep_rows, event_rows))
@@ -697,11 +903,16 @@ def import_run(directory: Path, *, patient_id: int, plan_id, plan_item_id, db_pa
                      ev["raw_json"]),
                 )
             if item["low_confidence"]:
+                cq = item["capture_quality"]
+                cq_text = f"{cq:.2f}" if cq is not None else "无法计算（这段没有可用帧）"
+                if item["reps_done"] == 0:
+                    reason = f"一次动作都没完成，capture_quality={cq_text}"
+                else:
+                    reason = f"capture_quality={cq_text} 低于 0.6"
                 con.execute(
                     "INSERT INTO alerts(patient_id,session_id,type,severity,message) VALUES(?,?,?,?,?)",
                     (patient_id, session_id, "low_capture", "info",
-                     f"训练组第{item['set_index']}组 capture_quality="
-                     f"{item['capture_quality']:.2f} 低于 0.6（离线导入自原型结果，非实时判定）"),
+                     f"训练组第{item['set_index']}组 {reason}（离线导入自原型结果，非实时判定）"),
                 )
         con.commit()
         print(f"[完成] session_id={session_id}，{len(items)} 组，"
@@ -725,13 +936,17 @@ def main(argv=None):
                               "（reps_valid/reps_target、幅度比、事件计数、capture_quality），标 provisional。"
                               "评分口径待常/陈确认，见 docs/decisions/0002。传 contract-d 才按接口契约 D 节"
                               "公式现算并写进 quality_score，供联调对比用，不是默认行为。")
+    parser.add_argument("--strict", action="store_true",
+                         help="遇到未知的 summary.status 直接拒绝导入并以非零退出码结束。"
+                              "不加这个开关时，未知状态按 aborted 落库、打 warning、"
+                              "并把本次导入的所有组标 needs_review=1。")
     args = parser.parse_args(argv)
 
     try:
         import_run(
             args.directory, patient_id=args.patient_id, plan_id=args.plan_id,
             plan_item_id=args.plan_item_id, db_path=args.db, dry_run=args.dry_run,
-            score_mode=args.score_mode,
+            score_mode=args.score_mode, strict=args.strict,
         )
     except ImportError_ as exc:
         print(f"[失败] {exc}", file=sys.stderr)

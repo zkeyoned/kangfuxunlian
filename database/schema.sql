@@ -126,22 +126,22 @@ CREATE TABLE IF NOT EXISTS session_items (
   exercise_code       TEXT NOT NULL REFERENCES exercises(code),
   set_index           INTEGER NOT NULL,
   reps_target         INTEGER NOT NULL,
-  reps_done           INTEGER NOT NULL,        -- 状态机数出来的次数
+  reps_done           INTEGER NOT NULL,        -- 状态机数出来的次数。离线导入允许为 0：患者尝试了但一次没完成（识别中断/幅度不足/遮挡）时照样落一条，配 low_confidence=1、needs_review=1、quality_score=NULL
   reps_valid          INTEGER NOT NULL,        -- 达到有效幅度的次数
   peak_angle_max      REAL,
   peak_angle_mean     REAL,
   duration_ms         INTEGER,
   quality_score       REAL,                    -- 0-100，按规则计算（含 5 个维度）。离线导入（database/import_results.py）默认不写这一列（NULL），只有显式传 --score-mode contract-d 才按契约 D 节现算，原因见 docs/02-数据字典.md
   score_breakdown_json TEXT,                   -- {"completion":30,"amplitude":22,...}。离线导入默认存的是各维度原始输入（非加权得分）并标 provisional，见 docs/02
-  compensation_count  INTEGER NOT NULL DEFAULT 0,  -- 提示事件计数（非代偿类 flag 的触发次数），不是"确诊代偿次数"；提示有冷却时间，条数不等于问题严重程度，离线导入时不用它反推评分
-  capture_quality     REAL,                    -- 0-1，关键点可用帧率
-  low_confidence      INTEGER NOT NULL DEFAULT 0,  -- 1=这组测不准，不给强提示
+  compensation_count  INTEGER NOT NULL DEFAULT 0,  -- 口径（20260919 统一）：每次动作内、非速度类、按提示代号去重的类型数，再按组求和；同一次动作里同一个提示出现两次只算一次。不是"确诊代偿次数"，提示有冷却时间，条数不等于问题严重程度，离线导入时不用它反推评分
+  capture_quality     REAL,                    -- 0-1，关键点可用帧率。离线导入口径（20260919 修正）：分母是这一组的整个时间跨度（从首次尝试或标定开始到该组结束，含标定失败与中断的尝试），不是只算已完成动作的时间窗；旧口径的值另存在 measurement_angle_json 的 capture_quality_completed_reps
+  low_confidence      INTEGER NOT NULL DEFAULT 0,  -- 1=这组测不准，不给强提示；离线导入时一次动作都没完成的组一律为 1
   angle_trace_json    TEXT,                    -- 可选：降采样角度序列（每 100ms 一个点）
   created_at          TEXT NOT NULL DEFAULT (datetime('now','localtime')),
-  checks_json           TEXT,                  -- 离线导入：原型 assessment.json 的逐项 met/not_met/unable_to_assess 判定，按 repetitions[].index 建 key
-  measurement_angle_json TEXT,                  -- 离线导入：二维测量角度参考值，不与 peak_angle_max 的口径混用，见 docs/02-数据字典.md
+  checks_json           TEXT,                  -- 离线导入：原型 assessment.json 的逐项 met/not_met/unable_to_assess 判定，按 repetitions[].index 建 key；这一组一次动作都没完成时，改存 interrupted_attempts（中断的尝试，带 interruption_reason）
+  measurement_angle_json TEXT,                  -- 离线导入：二维测量角度参考值，不与 peak_angle_max 的口径混用；另含 capture_quality_completed_reps（旧口径拍摄质量，只算已完成动作窗内的帧），见 docs/02-数据字典.md
   calibration_json      TEXT,                   -- 离线导入：原型标定基线快照（measures.baseline，含 captured_at_s），原样保留
-  needs_review           INTEGER NOT NULL DEFAULT 0  -- 离线导入：组内是否存在 needs_review=1 的 rep（预测补帧导致的不确定组）
+  needs_review           INTEGER NOT NULL DEFAULT 0  -- 离线导入：组内存在 needs_review=1 的 rep（预测补帧）、这一组一次动作都没完成、或 summary.status 未知，三种情况都为 1
 );
 
 -- 每一次动作（可选明细，默认存）。

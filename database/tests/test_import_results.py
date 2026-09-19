@@ -3,9 +3,9 @@
 用原型（algorithm/rehab-pose-demo）自带的合成样例 examples/synthetic_summary.json +
 examples/synthetic_frames.jsonl 跑一遍导入到临时 sqlite，断言行数和关键字段。
 
-不把样例复制进本仓库：直接引用 algorithm/rehab-pose-demo/examples/ 下的路径。这个目录现在
-还在未合并的 PR（backend/import-pose-demo-v0.6）里，main 上没有，所以这里对缺文件做 skip，
-等那个 PR 合并后这些测试才会真的跑起来。
+不把样例复制进本仓库：直接引用 algorithm/rehab-pose-demo/examples/ 下的路径。PR #1
+（backend/import-pose-demo-v0.6）已经合并进 main，这个目录现在就在仓库里，下面的
+skipUnless 只是防呆（万一有人删了样例），正常情况下**跳过数应该是 0**。
 
 样例是原型很早期的 schema_version 1.0 格式，字段比现在的 rehab_pose 代码少很多（没有
 measurement_metrics、没有 calibrations、没有 created_utc/status/effective_parameters 等），
@@ -236,6 +236,246 @@ class TestSessionEvents(unittest.TestCase):
 
     def test_no_groups_means_no_events_assigned(self):
         self.assertEqual(ir.assign_events_to_groups([{"timestamp_s": 1.0, "code": "X"}], {}), {})
+
+
+def _frames(start_s, end_s, step_s=0.1, visible=True):
+    """造一段帧：timestamp_s 从 start_s 到 end_s，可见性由 visible 控制。"""
+    rows = []
+    t = start_s
+    while t <= end_s + 1e-9:
+        rows.append({
+            "exercise": "SEATED_KNEE_EXTENSION", "timestamp_s": round(t, 3),
+            "visible": bool(visible), "confidence": 1 if visible else 0,
+            "smoothed_included_deg": 150 if visible else None,
+            "measurement_metrics": {"knee_included_deg": 150} if visible else {},
+        })
+        t += step_s
+    return rows
+
+
+def _write_run(directory: Path, summary: dict, rows: list, assessment: dict | None = None):
+    directory.mkdir(parents=True, exist_ok=True)
+    (directory / "summary.json").write_text(json.dumps(summary, ensure_ascii=False), encoding="utf-8")
+    with (directory / "frames.jsonl").open("w", encoding="utf-8") as f:
+        for row in rows:
+            f.write(json.dumps(row, ensure_ascii=False) + "\n")
+    if assessment is not None:
+        (directory / "assessment.json").write_text(
+            json.dumps(assessment, ensure_ascii=False), encoding="utf-8")
+    return directory
+
+
+def _base_summary(**overrides):
+    summary = {
+        "schema_version": "1.3", "algorithm_version": "0.6.0", "backend": "mediapipe",
+        "created_utc": "2026-09-19T10:00:00+00:00", "timing_source": "monotonic_clock",
+        "exercise": "SEATED_KNEE_EXTENSION", "status": "completed",
+        "effective_parameters": {"rest_max_deg": 105, "target_deg": 160,
+                                  "min_hold_s": 2, "min_return_s": 1, "max_gap_s": 0.3},
+        "calibrations": [{"captured_at_s": 0.5, "baseline": {"thigh_deg": 3.2}}],
+        "feedback_events": [],
+        "repetitions": [],
+        "interrupted_attempts": [],
+    }
+    summary.update(overrides)
+    return summary
+
+
+class TestReviewFixes(unittest.TestCase):
+    """按队友（后端与视觉算法）20260919 审查意见新增的四组测试：
+    代偿计数去重口径、零完成动作也落库、capture_quality 分母、未知 status 的处理。
+    用现造的合成 summary/frames，不依赖原型样例文件。"""
+
+    def setUp(self):
+        self.tmp = Path(tempfile.mkdtemp())
+        self.db_path = self.tmp / "test.sqlite3"
+        _fixture_db(self.db_path)
+
+    def tearDown(self):
+        shutil.rmtree(self.tmp, ignore_errors=True)
+
+    def _connect(self):
+        con = sqlite3.connect(self.db_path)
+        con.row_factory = sqlite3.Row
+        return con
+
+    def _import(self, summary, rows, assessment=None, **kwargs):
+        run_dir = _write_run(self.tmp / f"run_{len(list(self.tmp.iterdir()))}", summary, rows, assessment)
+        params = dict(patient_id=1, plan_id=None, plan_item_id=None,
+                      db_path=self.db_path, dry_run=False)
+        params.update(kwargs)
+        return ir.import_run(run_dir, **params)
+
+    # --- 1. compensation_count 口径：同一提示出现两次只计一次 --------------------
+    def test_same_prompt_twice_in_one_rep_counts_once(self):
+        """口径：每次动作内、非速度类、按提示代号去重的类型数，再按组求和。
+        同一次动作里前倾提示两次，session_events 两条，compensation_count 只记 1。"""
+        events = [
+            {"code": "TRUNK_FORWARD", "message": "身体前倾", "timestamp_s": 10.5, "level": "notice"},
+            {"code": "TRUNK_FORWARD", "message": "身体前倾", "timestamp_s": 11.5, "level": "notice"},
+            {"code": "THIGH_MOVEMENT", "message": "大腿移动", "timestamp_s": 12.0, "level": "notice"},
+            {"code": "KNEE_TOO_FAST", "message": "太快", "timestamp_s": 12.5, "level": "notice"},
+        ]
+        self.assertEqual(ir.rep_compensation_codes(events), ["TRUNK_FORWARD", "THIGH_MOVEMENT"],
+                          "按代号去重，too_fast 类不算进来")
+
+        summary = _base_summary(
+            feedback_events=events,
+            repetitions=[{"index": 1, "start_s": 10.0, "end_s": 13.0, "max_included_deg": 150,
+                          "target_comparison": {"amplitude_met": True}}],
+        )
+        session_id = self._import(summary, _frames(0.0, 14.0))
+        con = self._connect()
+        item = con.execute("SELECT * FROM session_items WHERE session_id=?", (session_id,)).fetchone()
+        self.assertEqual(item["compensation_count"], 2,
+                          "前倾两次只算一个类型，加上大腿移动共 2，too_fast 不计入")
+        events_rows = con.execute(
+            "SELECT * FROM session_events WHERE session_item_id=?", (item["id"],)).fetchall()
+        self.assertEqual(len(events_rows), 4, "逐条事件一条不少，去重只发生在计数口径上")
+        con.close()
+
+    # --- 2. 一次动作都没完成时也要落库 -------------------------------------------
+    def test_zero_completed_reps_still_creates_session_item(self):
+        events = [
+            {"code": "AMPLITUDE_BELOW_TARGET", "message": "幅度不够", "timestamp_s": 3.0, "level": "notice"},
+            {"code": "TRUNK_FORWARD", "message": "身体前倾", "timestamp_s": 4.0, "level": "notice"},
+            {"code": "SLR_KNEE_BENT", "message": "膝没伸直", "timestamp_s": 7.0, "level": "notice"},
+        ]
+        summary = _base_summary(
+            status="stopped_by_user",
+            feedback_events=events,
+            repetitions=[],
+            interrupted_attempts=[{"start_s": 2.0, "end_s": 6.0, "reason": "excursion_too_small"},
+                                   {"start_s": 7.0, "end_s": 9.0, "reason": "tracking_lost"}],
+        )
+        assessment = {
+            "attempts": [
+                {"attempt": 1, "completed_rep_index": None, "start_s": 2.0, "end_s": 6.0,
+                 "completed": False, "interruption_reason": "excursion_too_small",
+                 "status": "unable_to_assess",
+                 "checks": [{"metric": "amplitude", "status": "unable_to_assess"}]},
+                {"attempt": 2, "completed_rep_index": None, "start_s": 7.0, "end_s": 9.0,
+                 "completed": False, "interruption_reason": "tracking_lost",
+                 "status": "unable_to_assess",
+                 "checks": [{"metric": "amplitude", "status": "unable_to_assess"}]},
+            ],
+        }
+        session_id = self._import(summary, _frames(0.0, 10.0), assessment)
+        self.assertIsNotNone(session_id)
+        con = self._connect()
+
+        session = con.execute("SELECT * FROM sessions WHERE id=?", (session_id,)).fetchone()
+        self.assertEqual(session["status"], "aborted")
+
+        items = con.execute("SELECT * FROM session_items WHERE session_id=?", (session_id,)).fetchall()
+        self.assertEqual(len(items), 1, "一次都没完成也要有一条 session_item")
+        item = items[0]
+        self.assertEqual(item["reps_done"], 0)
+        self.assertEqual(item["reps_valid"], 0)
+        self.assertEqual(item["low_confidence"], 1)
+        self.assertEqual(item["needs_review"], 1)
+        self.assertIsNone(item["quality_score"])
+        self.assertIsNotNone(item["calibration_json"], "标定快照照存")
+        checks = json.loads(item["checks_json"])
+        self.assertEqual(len(checks["interrupted_attempts"]), 2, "中断的尝试照存")
+        breakdown = json.loads(item["score_breakdown_json"])
+        self.assertTrue(breakdown["zero_completed_reps"])
+
+        self.assertEqual(
+            con.execute("SELECT COUNT(*) c FROM reps WHERE session_item_id=?",
+                        (item["id"],)).fetchone()["c"], 0)
+        event_rows = con.execute(
+            "SELECT * FROM session_events WHERE session_item_id=?", (item["id"],)).fetchall()
+        self.assertEqual(len(event_rows), 3, "逐条提示事件全部入库，挂在这条 item 下面")
+        self.assertTrue(all(r["rep_index"] is None for r in event_rows), "没有 rep 可挂，rep_index 为空")
+        con.close()
+
+    def test_zero_completed_reps_not_scored_even_in_contract_d(self):
+        summary = _base_summary(status="stopped_by_user", repetitions=[],
+                                 interrupted_attempts=[{"start_s": 2.0, "end_s": 6.0,
+                                                        "reason": "excursion_too_small"}])
+        session_id = self._import(summary, _frames(0.0, 10.0), score_mode="contract-d")
+        con = self._connect()
+        item = con.execute("SELECT * FROM session_items WHERE session_id=?", (session_id,)).fetchone()
+        self.assertIsNone(item["quality_score"], "零完成组不给分，contract-d 也不给")
+        con.close()
+
+    # --- 3. capture_quality 分母取整组时间跨度 ------------------------------------
+    def test_capture_quality_uses_whole_group_span(self):
+        """前半段（标定、中断的尝试）拍不到人，后半段完成动作时拍得很好：
+        新口径（整组跨度做分母）必须明显低于旧口径（只算已完成动作窗内）。"""
+        rows = _frames(0.0, 9.9, visible=False) + _frames(10.0, 13.0, visible=True)
+        summary = _base_summary(
+            repetitions=[{"index": 1, "start_s": 10.0, "end_s": 13.0, "max_included_deg": 150,
+                          "target_comparison": {"amplitude_met": True}}],
+            interrupted_attempts=[{"start_s": 2.0, "end_s": 6.0, "reason": "excursion_too_small"}],
+        )
+        session_id = self._import(summary, rows)
+        con = self._connect()
+        item = con.execute("SELECT * FROM session_items WHERE session_id=?", (session_id,)).fetchone()
+        new_ratio = item["capture_quality"]
+        old_ratio = json.loads(item["measurement_angle_json"])["capture_quality_completed_reps"]
+        self.assertAlmostEqual(old_ratio, 1.0, places=6, msg="旧口径只看完成动作窗内，是满分")
+        self.assertLess(new_ratio, 0.4, "新口径把标定和中断的尝试算进分母，明显更低")
+        self.assertLess(new_ratio, old_ratio)
+        self.assertEqual(item["low_confidence"], 1, "新口径低于 0.6，应标 low_confidence")
+        con.close()
+
+    def test_group_span_covers_calibration_and_interrupted_attempts(self):
+        groups = {1: [{"index": 1, "start_s": 10.0, "end_s": 13.0, "rep_in_set": 1}]}
+        summary = _base_summary(
+            calibrations=[{"captured_at_s": 0.5}],
+            interrupted_attempts=[{"start_s": 2.0, "end_s": 15.0, "reason": "tracking_lost"}],
+        )
+        spans = ir.compute_group_spans(groups, summary, _frames(0.0, 16.0))
+        self.assertEqual(spans[1], (0.5, 15.0))
+
+    # --- 4. 未知 summary.status ---------------------------------------------------
+    def test_unknown_status_defaults_to_aborted_and_needs_review(self):
+        summary = _base_summary(
+            status="some_new_state_from_prototype",
+            repetitions=[{"index": 1, "start_s": 10.0, "end_s": 13.0, "max_included_deg": 150,
+                          "target_comparison": {"amplitude_met": True}}],
+        )
+        session_id = self._import(summary, _frames(0.0, 14.0))
+        con = self._connect()
+        session = con.execute("SELECT * FROM sessions WHERE id=?", (session_id,)).fetchone()
+        self.assertEqual(session["status"], "aborted", "未知状态不再乐观地按 finished 处理")
+        item = con.execute("SELECT * FROM session_items WHERE session_id=?", (session_id,)).fetchone()
+        self.assertEqual(item["needs_review"], 1)
+        con.close()
+
+    def test_unknown_status_with_strict_refuses_import(self):
+        summary = _base_summary(
+            status="some_new_state_from_prototype",
+            repetitions=[{"index": 1, "start_s": 10.0, "end_s": 13.0, "max_included_deg": 150,
+                          "target_comparison": {"amplitude_met": True}}],
+        )
+        run_dir = _write_run(self.tmp / "run_strict", summary, _frames(0.0, 14.0))
+        with self.assertRaises(ir.ImportError_):
+            ir.import_run(run_dir, patient_id=1, plan_id=None, plan_item_id=None,
+                          db_path=self.db_path, dry_run=False, strict=True)
+        con = self._connect()
+        self.assertEqual(con.execute("SELECT COUNT(*) c FROM sessions").fetchone()["c"], 0,
+                          "--strict 下一条都不许落库")
+        con.close()
+        # CLI 层：--strict 遇到未知状态应该非零退出
+        exit_code = ir.main([str(run_dir), "--patient-id", "1", "--db", str(self.db_path), "--strict"])
+        self.assertEqual(exit_code, 1)
+
+    def test_known_status_still_maps_as_before(self):
+        summary = _base_summary(
+            status="plan_completed",
+            repetitions=[{"index": 1, "start_s": 10.0, "end_s": 13.0, "max_included_deg": 150,
+                          "target_comparison": {"amplitude_met": True}}],
+        )
+        session_id = self._import(summary, _frames(0.0, 14.0))
+        con = self._connect()
+        session = con.execute("SELECT * FROM sessions WHERE id=?", (session_id,)).fetchone()
+        self.assertEqual(session["status"], "finished")
+        item = con.execute("SELECT * FROM session_items WHERE session_id=?", (session_id,)).fetchone()
+        self.assertEqual(item["needs_review"], 0, "状态已知、没有补帧，不该平白标复核")
+        con.close()
 
 
 if __name__ == "__main__":
