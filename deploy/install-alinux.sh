@@ -64,6 +64,23 @@ fi
 # 下一行的 .venv/bin/pip 随即 No such file or directory，重装必然中断。
 rsync -a --delete --exclude data --exclude .git --exclude __pycache__ --exclude .venv "$(cd "$(dirname "$0")/.." && pwd)/" "$APP_DIR/"
 cd "$APP_DIR"
+
+# 2.2 线上副本的接口地址适配
+#
+# frontend/app.js 里 API_BASE 写的是本地联调地址 http://127.0.0.1:8801/api/v1。
+# 公网访问时这个地址指向的是访客自己的电脑，页面能打开但登录和数据请求全部失败。
+# 线上由后端同源托管 frontend/，所以只在部署出来的这份副本里改成相对路径，
+# 仓库源码与本地联调方式不变。VISION_BASE（本机视觉服务 8802）按设计保持本机地址。
+# 找不到要替换的那一行就中止，避免前端改了写法后这里悄悄失效。
+if [ -f frontend/app.js ]; then
+  if grep -q '"http://127.0.0.1:8801/api/v1"' frontend/app.js; then
+    sed -i 's#"http://127.0.0.1:8801/api/v1"#"/api/v1"#' frontend/app.js
+  elif ! grep -q 'API_BASE = "/api/v1"' frontend/app.js; then
+    echo "frontend/app.js 里没找到预期的 API_BASE 写法，请检查后再部署" >&2
+    exit 1
+  fi
+fi
+
 [ -d .venv ] || "$PY" -m venv .venv
 .venv/bin/pip install -q -i https://mirrors.aliyun.com/pypi/simple/ -r requirements.txt
 chown -R rehab:rehab "$APP_DIR" "$DATA_DIR"
