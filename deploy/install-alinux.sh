@@ -15,7 +15,54 @@ PY=$(command -v python3.11)
 # 2. 目录与用户
 id -u rehab >/dev/null 2>&1 || useradd -r -s /sbin/nologin rehab
 mkdir -p "$APP_DIR" "$DATA_DIR/logs"
-rsync -a --delete --exclude data --exclude .git --exclude __pycache__ "$(cd "$(dirname "$0")/.." && pwd)/" "$APP_DIR/"
+
+# 2.1 已有旧库的升级检查
+#
+# backend/db.py 的 init_db() 每次启动都会对已有库重跑一遍 database/schema.sql。
+# CREATE TABLE / CREATE INDEX 都带 IF NOT EXISTS，对结构相同的库是幂等的；但如果
+# 库是更早版本建的，表已存在所以不会补新列，而 schema.sql 末尾的索引又引用了新列，
+# 启动时会直接抛 `no such column: <列名>` 并退出，报错信息看不出是版本不匹配。
+#
+# ALTER TABLE ADD COLUMN 不支持 IF NOT EXISTS，所以补列语句不能留在 schema.sql 里，
+# 只能放 database/migrations/ 手工执行（该目录文件头有说明）。这里替部署做掉这一步：
+# 检测到旧库就先备份再补列，补不上的列（通常是已经有了）跳过，不中断部署。
+DB_FILE="$DATA_DIR/rehabtrack.sqlite3"
+if [ -f "$DB_FILE" ]; then
+  SRC_DIR="$(cd "$(dirname "$0")/.." && pwd)"
+  NEED=$("$PY" - "$DB_FILE" <<'PYEOF'
+import sqlite3, sys
+con = sqlite3.connect(sys.argv[1])
+cols = [r[1] for r in con.execute("PRAGMA table_info(sessions)")]
+print("yes" if cols and "import_source_key" not in cols else "no")
+PYEOF
+)
+  if [ "$NEED" = "yes" ]; then
+    STAMP=$(date +%Y%m%d-%H%M%S)
+    cp "$DB_FILE" "$DATA_DIR/rehabtrack.sqlite3.bak-$STAMP"
+    echo "检测到旧版本数据库，已备份为 rehabtrack.sqlite3.bak-$STAMP，正在补列……"
+    for mig in "$SRC_DIR"/database/migrations/*.sql; do
+      [ -f "$mig" ] || continue
+      # ALTER 逐条执行，已存在的列会报 duplicate column name，跳过即可
+      "$PY" - "$DB_FILE" "$mig" <<'PYEOF'
+import sqlite3, sys
+con = sqlite3.connect(sys.argv[1])
+sql = open(sys.argv[2], encoding="utf-8").read()
+for stmt in [s.strip() for s in sql.split(";") if s.strip()]:
+    try:
+        con.execute(stmt)
+    except sqlite3.OperationalError as e:
+        if "duplicate column name" not in str(e):
+            print("  跳过一条语句：%s" % e)
+con.commit()
+PYEOF
+    done
+    echo "旧库升级完成。原库备份在 $DATA_DIR/rehabtrack.sqlite3.bak-$STAMP"
+  fi
+fi
+# --exclude .venv 必须有：虚拟环境建在 $APP_DIR/.venv，而源目录没有它，
+# 少了这条 --delete 会在第二次部署时删掉正在用的 venv，且删不干净（目录非空），
+# 下一行的 .venv/bin/pip 随即 No such file or directory，重装必然中断。
+rsync -a --delete --exclude data --exclude .git --exclude __pycache__ --exclude .venv "$(cd "$(dirname "$0")/.." && pwd)/" "$APP_DIR/"
 cd "$APP_DIR"
 [ -d .venv ] || "$PY" -m venv .venv
 .venv/bin/pip install -q -i https://mirrors.aliyun.com/pypi/simple/ -r requirements.txt
