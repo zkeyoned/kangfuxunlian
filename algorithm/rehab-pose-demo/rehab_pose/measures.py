@@ -39,7 +39,7 @@ class MotionMeasures:
 
     def reset(self):
         self.samples=deque();self.speeds=deque();self.baseline=None
-        self.since={};self.sent={};self.last_seen=None
+        self.since={};self.sent={};self.latched={};self.last_seen=None
 
     def update(self,t,m,width,height,phase='waiting_for_rest'):
         if not math.isfinite(t) or (self.last_t is not None and t<=self.last_t):raise ValueError('Measurement timestamps must increase')
@@ -109,21 +109,29 @@ class MotionMeasures:
                 if a is not None and b is not None:values[dest]=difference(a,b)
             checks={}
             if self.exercise=='1':
-                trunk=values['trunk_delta_deg'];thigh=values['thigh_delta_deg'];speed=values['knee_velocity_deg_s']
+                trunk=values['trunk_delta_deg'];thigh=values['thigh_delta_deg']
+                def latch(code,trigger,clear):
+                    if self.latched.get(code):
+                        if clear:self.latched[code]=False
+                    elif trigger:self.latched[code]=True
+                    return self.latched.get(code,False)
                 checks={
-                    'TRUNK_FORWARD':(trunk is not None and trunk>c.trunk_delta_limit_deg,'身体前倾超出设置范围'),
-                    'TRUNK_BACKWARD':(trunk is not None and trunk<-c.trunk_delta_limit_deg,'身体后仰超出设置范围'),
-                    'THIGH_MOVEMENT':(thigh is not None and abs(thigh)>c.thigh_delta_limit_deg,'大腿位置变化超出设置范围'),
-                    'KNEE_TOO_FAST':(speed is not None and abs(speed)>c.speed_limit_deg_s,'动作速度超出设置范围')}
+                    'TRUNK_FORWARD':(latch('TRUNK_FORWARD',trunk is not None and trunk>c.trunk_delta_limit_deg,
+                                           trunk is None or trunk<=10),'身体前倾超出设置范围'),
+                    'TRUNK_BACKWARD':(latch('TRUNK_BACKWARD',trunk is not None and trunk<-c.trunk_delta_limit_deg,
+                                            trunk is None or trunk>=-10),'身体后仰超出设置范围'),
+                    'THIGH_MOVEMENT':(latch('THIGH_MOVEMENT',thigh is not None and abs(thigh)>c.thigh_delta_limit_deg,
+                                           thigh is None or abs(thigh)<=5),'大腿位置变化超出设置范围')}
             for code in list(self.since):
                 if code not in checks or not checks[code][0]:self.since.pop(code,None)
+            emitted=False
             for code,(condition,message) in checks.items():
                 if condition:
                     self.since.setdefault(code,t)
                     dwell=c.speed_dwell_s if code=='KNEE_TOO_FAST' else c.feedback_dwell_s
-                    if t-self.since[code]>=dwell and t-self.sent.get(code,-1e9)>=c.feedback_cooldown_s:
+                    if not emitted and t-self.since[code]>=dwell and t-self.sent.get(code,-1e9)>=c.feedback_cooldown_s:
                         alerts.append(dict(code=code,message=message,level='notice',timestamp_s=t))
-                        self.sent[code]=t
+                        self.sent[code]=t;emitted=True
         return self._out(values,status,progress,alerts)
 
     def _out(self,values,status,progress,alerts):

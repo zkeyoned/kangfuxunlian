@@ -13,6 +13,8 @@ import json
 import logging
 import logging.handlers
 import os
+import re
+import sqlite3
 import sys
 import time
 from datetime import date, datetime, timedelta
@@ -23,11 +25,16 @@ from fastapi import Depends, FastAPI, HTTPException, Request, Response
 from fastapi.middleware.cors import CORSMiddleware
 from fastapi.responses import JSONResponse, StreamingResponse
 from fastapi.staticfiles import StaticFiles
-from pydantic import BaseModel, Field
+from pydantic import BaseModel, Field, field_validator
 
 sys.path.insert(0, str(Path(__file__).resolve().parent))
 import db  # noqa: E402
 from scoring import DEFAULT_WEIGHTS, score_item  # noqa: E402
+from care_links import install_routes as install_care_routes  # noqa: E402
+from training_reports import install_routes as install_report_routes  # noqa: E402
+from report_videos import install_routes as install_video_routes
+from visual_prescriptions import install_routes as install_prescription_routes
+from training_selection import install_routes as install_selection_routes
 
 ROOT = Path(__file__).resolve().parent.parent
 FRONTEND = ROOT / "frontend"
@@ -95,22 +102,65 @@ def require_role(*roles):
     return dep
 
 
+def patient_scope(user: dict, alias: str = "p"):
+    # Only a selected/accepted therapist sees the patient, even in the same institution.
+    if user['role'] == 'therapist':
+        return f"{alias}.therapist_id=?", user['id']
+    return f"{alias}.institution_id=?", user['institution_id']
+
+
 def patient_in_scope(con, user: dict, patient_id: int) -> dict:
-    """机构隔离：康复师只能看本机构患者；患者只能看自己。"""
+    """患者只看自己，康复师只看关联患者，机构管理员保留机构范围。"""
     p = db.one(con.execute("SELECT * FROM patients WHERE id=?", (patient_id,)))
     if not p:
         raise HTTPException(404, "患者不存在")
     if user["role"] == "patient" and p["user_id"] != user["id"]:
         raise HTTPException(403, "只能查看自己的数据")
-    if user["role"] in ("therapist", "admin") and p["institution_id"] != user["institution_id"]:
+    if user["role"] == "therapist" and p["therapist_id"] != user["id"]:
+        raise HTTPException(403, "尚未与该患者建立关联")
+    if user["role"] == "admin" and p["institution_id"] != user["institution_id"]:
         raise HTTPException(403, "不属于你的机构")
     return p
+
+
+install_care_routes(app, get_con, current_user)
+install_report_routes(app, get_con, current_user, patient_in_scope)
+install_video_routes(app, get_con, current_user, patient_in_scope)
+install_prescription_routes(app, get_con, current_user, patient_in_scope)
+install_selection_routes(app, get_con, current_user)
 
 
 # ---------- 模型 ----------
 class LoginIn(BaseModel):
     username: str
     password: str
+
+
+def valid_password(value):
+    return 5<=len(value)<=15 and bool(re.search(r"[A-Za-z]",value)) and bool(re.search(r"[0-9]",value))
+
+class PasswordPolicy(BaseModel):
+    password: str
+    @field_validator("password")
+    @classmethod
+    def validate_password(cls,value):
+        if not valid_password(value):raise ValueError("密码须为5–15位，且同时包含字母和数字")
+        return value
+
+class ChangePasswordIn(BaseModel):
+    username: str
+    old_password: str
+    new_password: str
+    @field_validator("new_password")
+    @classmethod
+    def validate_new(cls,value):
+        return PasswordPolicy.validate_password(value)
+
+class RegisterIn(PasswordPolicy):
+    username: str = Field(max_length=254)
+    password: str = Field(min_length=5, max_length=15)
+    display_name: str = Field(min_length=1, max_length=50)
+    role: str = "patient"
 
 
 class SessionStart(BaseModel):
@@ -172,7 +222,7 @@ class PlanIn(BaseModel):
     items: list[PlanItemIn]
 
 
-class PatientIn(BaseModel):
+class PatientIn(PasswordPolicy):
     username: str
     password: str
     display_name: str
@@ -308,12 +358,46 @@ def healthz(con=Depends(get_con)):
     return {"ok": True, "version": APP_VERSION, "users": n, "time": db.now()}
 
 
+@app.post("/api/v1/auth/register", status_code=201)
+def register(body: RegisterIn, request: Request, con=Depends(get_con)):
+    username = body.username.strip().lower()
+    name = body.display_name.strip()
+    if body.role != "patient":
+        raise HTTPException(400, "当前仅开放患者注册，康复师账号请联系团队配置")
+    if not name or not body.password.strip():
+        raise HTTPException(400, "姓名和密码不能为空")
+    if not (re.fullmatch(r"1[3-9]\d{9}", username) or re.fullmatch(r"[^\s@]+@[^\s@]+\.[^\s@]+", username)):
+        raise HTTPException(400, "请输入有效的手机号或邮箱")
+    password_hash = db.hash_password(body.password)
+    try:
+        # Lock through duplicate check and all inserts, including the audit row.
+        with con:
+            con.execute("BEGIN IMMEDIATE")
+            if con.execute("SELECT 1 FROM users WHERE lower(username)=?", (username,)).fetchone():
+                raise HTTPException(409, "该手机号或邮箱已注册，请返回登录")
+            institution_id = con.execute("INSERT INTO institutions(name) VALUES(?)", ("个人训练空间（待关联机构）",)).lastrowid
+            uid = con.execute(
+                "INSERT INTO users(institution_id,role,username,password_hash,display_name) VALUES(?,?,?,?,?)",
+                (institution_id, "patient", username, password_hash, name)).lastrowid
+            con.execute("INSERT INTO patients(user_id,institution_id) VALUES(?,?)", (uid, institution_id))
+            con.execute("INSERT INTO audit_logs(user_id,action,target,ip) VALUES(?,?,?,?)",
+                        (uid, "register", f"user:{uid}", request.client.host if request.client else None))
+    except sqlite3.IntegrityError:
+        raise HTTPException(409, "账号创建冲突，请返回登录或重试")
+    return {"ok": True, "username": username, "role": "patient"}
+
+
 @app.post("/api/v1/auth/login")
 def login(body: LoginIn, request: Request, con=Depends(get_con)):
-    u = db.one(con.execute("SELECT * FROM users WHERE username=? AND is_active=1", (body.username,)))
+    username = body.username.strip()
+    if "@" in username:
+        username = username.lower()
+    u = db.one(con.execute("SELECT * FROM users WHERE username=? AND is_active=1", (username,)))
     if not u or not db.verify_password(body.password, u["password_hash"]):
         db.audit(con, None, "login.fail", f"user:{body.username}", ip=request.client.host if request.client else None)
         raise HTTPException(401, "用户名或密码错误")
+    if not valid_password(body.password):
+        return JSONResponse(status_code=403,content={"error":"原密码不符合新规则，请重新设置5–15位且包含字母和数字的密码", "code":"PASSWORD_RESET_REQUIRED"})
     tok = db.issue_token(con, u["id"])
     db.audit(con, u["id"], "login", None, ip=request.client.host if request.client else None)
     out = {k: u[k] for k in ("id", "role", "display_name", "institution_id", "username")}
@@ -321,6 +405,20 @@ def login(body: LoginIn, request: Request, con=Depends(get_con)):
         p = db.one(con.execute("SELECT id FROM patients WHERE user_id=?", (u["id"],)))
         out["patient_id"] = p["id"] if p else None
     return {"token": tok, "user": out}
+
+
+@app.post("/api/v1/auth/change-password")
+def change_password(body: ChangePasswordIn, con=Depends(get_con)):
+    username=body.username.strip()
+    if "@" in username:username=username.lower()
+    with con:
+        con.execute("BEGIN IMMEDIATE")
+        u=con.execute("SELECT * FROM users WHERE username=? AND is_active=1",(username,)).fetchone()
+        if not u or not db.verify_password(body.old_password,u["password_hash"]):raise HTTPException(401,"账号或原密码错误")
+        con.execute("UPDATE users SET password_hash=? WHERE id=?",(db.hash_password(body.new_password),u["id"]))
+        con.execute("DELETE FROM tokens WHERE user_id=?",(u["id"],))
+        con.execute("INSERT INTO audit_logs(user_id,action,target) VALUES(?,?,?)",(u["id"],"password.change",f"user:{u['id']}"))
+    return {"ok":True}
 
 
 @app.post("/api/v1/auth/logout")
@@ -459,9 +557,10 @@ def my_trend(exercise: Optional[str] = None, metric: str = "peak_angle_max", use
 # ---------- 康复师 / 机构端 ----------
 @app.get("/api/v1/patients")
 def patients(user=Depends(require_role("therapist", "admin")), con=Depends(get_con)):
+    scope, value = patient_scope(user)
     out = db.rows(con.execute(
         "SELECT p.*, u.display_name, u.username, t.display_name AS therapist_name FROM patients p "
-        "JOIN users u ON u.id=p.user_id LEFT JOIN users t ON t.id=p.therapist_id WHERE p.institution_id=? ORDER BY p.id", (user["institution_id"],)))
+        f"JOIN users u ON u.id=p.user_id LEFT JOIN users t ON t.id=p.therapist_id WHERE {scope} ORDER BY p.id", (value,)))
     since = (date.today() - timedelta(days=6)).isoformat()
     for p in out:
         p["baseline"] = json.loads(p.pop("baseline_json") or "{}")
@@ -562,14 +661,15 @@ def plan_status(plan_id: int, status: str, user=Depends(require_role("therapist"
 
 @app.get("/api/v1/alerts")
 def alerts(open: int = 1, user=Depends(require_role("therapist", "admin")), con=Depends(get_con)):
-    for p in db.rows(con.execute("SELECT id FROM patients WHERE institution_id=?", (user["institution_id"],))):
+    scope, value = patient_scope(user)
+    for p in db.rows(con.execute(f"SELECT p.id FROM patients p WHERE {scope}", (value,))):
         inactive_check(con, p["id"])
     sql = ("SELECT a.*, u.display_name AS patient_name FROM alerts a JOIN patients p ON p.id=a.patient_id JOIN users u ON u.id=p.user_id "
-           "WHERE p.institution_id=? ")
+           f"WHERE {scope} ")
     if open:
         sql += "AND a.acknowledged_at IS NULL "
     sql += "ORDER BY CASE a.severity WHEN 'high' THEN 0 WHEN 'warn' THEN 1 ELSE 2 END, a.created_at DESC LIMIT 100"
-    return db.rows(con.execute(sql, (user["institution_id"],)))
+    return db.rows(con.execute(sql, (value,)))
 
 
 @app.post("/api/v1/alerts/{aid}/ack")
@@ -603,13 +703,13 @@ def export_csv(pid: int, user=Depends(require_role("therapist", "admin")), con=D
 
 @app.get("/api/v1/stats")
 def stats(user=Depends(require_role("therapist", "admin")), con=Depends(get_con)):
-    inst = user["institution_id"]
+    scope, value = patient_scope(user)
     since = (date.today() - timedelta(days=6)).isoformat()
     return {
-        "patients": db.one(con.execute("SELECT COUNT(*) AS n FROM patients WHERE institution_id=?", (inst,)))["n"],
-        "sessions_7d": db.one(con.execute("SELECT COUNT(*) AS n FROM sessions s JOIN patients p ON p.id=s.patient_id WHERE p.institution_id=? AND s.status='finished' AND s.started_at>=?", (inst, since)))["n"],
-        "open_alerts": db.one(con.execute("SELECT COUNT(*) AS n FROM alerts a JOIN patients p ON p.id=a.patient_id WHERE p.institution_id=? AND a.acknowledged_at IS NULL", (inst,)))["n"],
-        "quality_7d": db.one(con.execute("SELECT ROUND(AVG(si.quality_score),1) AS q FROM session_items si JOIN sessions s ON s.id=si.session_id JOIN patients p ON p.id=s.patient_id WHERE p.institution_id=? AND s.started_at>=?", (inst, since)))["q"],
+        "patients": db.one(con.execute(f"SELECT COUNT(*) AS n FROM patients p WHERE {scope}", (value,)))["n"],
+        "sessions_7d": db.one(con.execute(f"SELECT COUNT(*) AS n FROM sessions s JOIN patients p ON p.id=s.patient_id WHERE {scope} AND s.status='finished' AND s.started_at>=?", (value, since)))["n"],
+        "open_alerts": db.one(con.execute(f"SELECT COUNT(*) AS n FROM alerts a JOIN patients p ON p.id=a.patient_id WHERE {scope} AND a.acknowledged_at IS NULL", (value,)))["n"],
+        "quality_7d": db.one(con.execute(f"SELECT ROUND(AVG(si.quality_score),1) AS q FROM session_items si JOIN sessions s ON s.id=si.session_id JOIN patients p ON p.id=s.patient_id WHERE {scope} AND s.started_at>=?", (value, since)))["q"],
     }
 
 

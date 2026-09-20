@@ -66,6 +66,8 @@ def init_db(seed: bool = True) -> None:
     fresh = not DB_PATH.exists()
     con = connect()
     con.executescript(SCHEMA.read_text(encoding="utf-8"))
+    for migration in sorted((ROOT / "backend" / "migrations").glob("*.sql")):
+        con.executescript(migration.read_text(encoding="utf-8"))
     con.commit()
     if fresh and seed and SEED.exists():
         load_seed(con, json.loads(SEED.read_text(encoding="utf-8")))

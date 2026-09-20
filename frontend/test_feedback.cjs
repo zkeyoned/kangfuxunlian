@@ -1,0 +1,17 @@
+const fs=require('fs'),vm=require('vm'),assert=require('assert');
+const src=fs.readFileSync('app.js','utf8'),html=fs.readFileSync('index.html','utf8'),nodes=new Map(),storage=new Map();
+const c={$:id=>{assert(html.includes(`id="${id.slice(1)}"`),id);if(!nodes.has(id))nodes.set(id,{});return nodes.get(id)},sessionStorage:{getItem:k=>storage.get(k),setItem:(k,v)=>storage.set(k,v)},showToast(){}};
+vm.createContext(c);
+const escape=src.split(/\r?\n/).find(x=>x.startsWith('function escapeHtml('));
+vm.runInContext(src.slice(0,src.indexOf('const $ ='))+'\nlet feedbackReports={},feedbackSelection=0;\n'+escape+'\n'+src.slice(src.indexOf('function feedbackStorageKey('),src.indexOf('function renderTherapist(')),c);
+c.renderFeedback();assert.equal(nodes.get('#feedback-status').textContent,'暂无记录');assert.equal(nodes.get('#feedback-metrics').innerHTML,'');
+const result={training_session:{plan:{hold_s:3}},repetitions:[{knee_peak_deg:169,movement_to_first_peak_s:2,target_hold_s:2.4,return_s:1.8},{knee_peak_deg:179,movement_to_first_peak_s:null,target_hold_s:1,return_s:null,needs_review:true}],feedback_events:[{timestamp_s:15,training_set:1,message:'<script>bad</script>'}],brief_report:{version:'1.0',side:'左腿',completed_reps:2,target_reps:10,interrupted_attempts:1,scope:'训练辅助',sets:[{set:1,status:'记录未完成',completed_reps:2,target_reps:10,angle_hold_met_reps:0,needs_review_reps:1,finding:'保持时间不足',problems:[{code:'HOLD_TOO_SHORT'}]}],suggestions:['达到目标后保持3秒。']}};
+c.rememberFeedback('seated',result,7);
+assert(nodes.get('#feedback-metrics').innerHTML.includes('169.0°'));assert(!nodes.get('#feedback-metrics').innerHTML.includes('179.0°'));assert(nodes.get('#feedback-metrics').innerHTML.includes('2.4秒'));assert(nodes.get('#feedback-events').innerHTML.includes('&lt;script&gt;'));assert(nodes.get('#feedback-sets').innerHTML.includes('保持时间不足'));
+c.loadFeedbackReports(8);assert.equal(nodes.get('#feedback-status').textContent,'暂无记录');
+c.loadFeedbackReports(7);assert.equal(nodes.get('#feedback-status').textContent,'有待调整项');
+c.renderFeedback(1);assert.equal(nodes.get('#feedback-status').textContent,'暂无记录');
+const zero=c.buildFeedbackRecord('seated',{...result,repetitions:[]});assert(zero.metrics.some(m=>m[0]==='最大膝关节夹角'&&m[1]==='暂无可靠数据'));
+assert(!c.buildFeedbackRecord('supine',result).metrics.some(m=>m[0]==='最大膝关节夹角'));
+assert(src.includes('rememberFeedback(owner.exerciseId,result,owner.userId)'));
+console.log('PASS: real report rendering, no mock fallback, missing/flagged measurements, group findings, XSS escaping, account isolation and restore');

@@ -51,3 +51,37 @@ python3 tests/test_api.py
 ```
 
 冒烟测试跑一遍完整闭环（登录、建计划、上传训练组、生成报告），失败会直接抛出并带上请求方法、路径和响应内容，方便定位。合并前必须全过。
+
+## 训练简报同步
+
+网页训练结束自动调用 /api/v1/training-reports 保存视觉展示快照，患者反馈和已关联康复师报告页共享读取。增量迁移002_training_reports.sql与接口契约F节待前端/数据库审核。结果不转换成旧种子动作代号，不调用旧质量评分，原始关键点不落库；录像另见下节；sessions/items的正式算法映射仍待对齐。
+
+使用 backend/test_training_reports.py 在临时库验证去重、零次与缺失指标保留、双方权限、解绑及后续关联、已读。外置前端需同时更新app.js/index.html，主按钮为查看动作反馈，失败可重试，下载只是备份。参见本地前端LOCAL_INTEGRATION.md。
+
+## 报告录像
+
+契约 G 节及迁移 003 支持报告关联录像。录像实际字节分块存入 SQLite，单块 1 MiB、单条不超过 256 MiB。只有完整长度及 SHA256 校验通过才可播放，每次访问核验患者或当前关联康复师权限。`python backend/test_report_videos.py` 在隔离库验证。
+
+外置前端录制无声原始视频，训练结束先保存报告再上传录像。上传失败保留 IndexedDB 副本，可重试。旧报告没有录像时显示无录像。浏览器不支持录制时仅保存报告；视觉会话丢失且未生成报告的本地录像目前不会自动入库。真实摄像头录制和浏览器解码仍需现场联调，二进制接口测试不替代此项。备份数据库会包含录像，不能提交 Git。
+
+## 视觉方案同步
+
+visual_prescriptions.py / 004 迁移提供契约H接口。已关联康复师保存草稿或发布不可变版本，患者读取最新发布版。后续解除关联会使旧作者方案不再下发。组次允许患者本次自主调整，报告内保留方案快照与实际选择。参数是技术校验范围，临床适用性待康复师确认。
+
+运行 python backend/test_visual_prescriptions.py 与 python backend/test_plan_parameters.py。实时桥接部署说明见 algorithm/integration/README.md；前端独立文件也必须同步更新。
+
+## 补齐本机虚构演示患者
+
+显式运行 `python backend/provision_demo_patients.py`，新增赵敏（p.zhaomin / zhao123）、林雨晴（p.linyuqing / linyu123）、周启明（p.zhouqiming / zhou123），关联原有 dr.lin 演示康复师。张先生和吴女士继续使用种子账号 p.zhang / zhang123、p.wu / wu123。
+
+脚本不在服务启动时自动执行；重复执行不覆盖密码、档案和已更改的关联；同名登录账号冲突时整批回滚。只创建空演示档案，不伪造报告、诊断、知情同意或训练方案。公开的演示密码不可用于真实患者资料。外置前端同步增加六个登录入口（五患者、一康复师），沟通联系人取当前康复师真实关联列表；消息持久化仍沿用现有前端实现。
+
+## 密码规则
+
+注册、新建患者及修改密码统一要求5–15位，同时包含英文字母和数字。旧密码在下次登录正确验证后检查，不合规返回 PASSWORD_RESET_REQUIRED，前端引导验证原密码再改密。修改撤销该账号所有令牌。演示旧短密码也必须改；快捷入口为初始密码，改后请手动输入。没有验证码找回功能。既有令牌不会根据不可逆哈希推断密码强弱，保留到原有效期或改密撤销。
+
+验证：python backend/test_password_policy.py。tests/test_api.py 仅在隔离演示库对短演示密码执行改密再运行闭环，勿用于真实数据。
+
+### 新患者训练入口
+
+迁移005随启动执行。GET/PUT /api/v1/me/training-selection 按登录患者隔离保存自主选择。新用户无默认动作，康复师发布方案优先；仅演示账号可在前端展示默认动作。验证：在 backend 下运行 python -m unittest test_training_selection。外部前端需同步 dist/app.js 与 dist/index.html，本仓库 PR 不含该前端。

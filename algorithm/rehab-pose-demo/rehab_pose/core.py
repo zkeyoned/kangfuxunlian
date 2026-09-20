@@ -18,19 +18,26 @@ class Config:
     max_gap_s: float = .3
     smoothing_tau_s: float = .08
     min_confidence: float = .6
+    rest_min_deg: float = 0
+    start_dwell_s: float = 0
+    target_dwell_s: float = 0
+    reversal_dwell_s: float = 0
+    attempt_timeout_s: float = 0
 
     def __post_init__(self):
         for key, value in asdict(self).items():
             if isinstance(value, bool) or not isinstance(value, (int, float)) or not math.isfinite(value):
                 raise ValueError(f"Invalid configuration: {key}")
-        if not 0 < self.rest_max_deg < self.start_deg < self.target_deg <= 180:
-            raise ValueError("Expected 0 < rest_max_deg < start_deg < target_deg <= 180")
+        if not 0 <= self.rest_min_deg < self.rest_max_deg <= self.start_deg < self.target_deg <= 180:
+            raise ValueError("Expected 0 <= rest_min_deg < rest_max_deg <= start_deg < target_deg <= 180")
         if not 0 <= self.min_confidence <= 1:
             raise ValueError("min_confidence must be 0..1")
         for key in ("hysteresis_deg", "min_excursion_deg", "reversal_deg", "rest_dwell_s", "max_gap_s"):
             if getattr(self, key) <= 0:
                 raise ValueError(f"{key} must be positive")
-        if any(getattr(self, k) < 0 for k in ("min_hold_s", "min_return_s", "smoothing_tau_s")):
+        if any(getattr(self, k) < 0 for k in ("min_hold_s", "min_return_s", "smoothing_tau_s",
+                                               "start_dwell_s", "target_dwell_s", "reversal_dwell_s",
+                                               "attempt_timeout_s")):
             raise ValueError("Times must be nonnegative")
         if self.target_deg - self.hysteresis_deg <= self.start_deg:
             raise ValueError("Target hysteresis must stay above start threshold")
@@ -99,6 +106,7 @@ class Analyzer:
         self.interrupted=[]
         self.last_observed_t=None
         self.gap_pending=False
+        self.start_since=None
 
     def abort(self, t, reason):
         if self.active:
@@ -108,6 +116,7 @@ class Analyzer:
         self.rest_since=None
         self.smooth=None
         self.gap_pending=False
+        self.start_since=None
 
     def update(self, t, raw_angle, valid=True, bridge_pending=False):
         if not math.isfinite(t) or t < 0 or (self.last_t is not None and t <= self.last_t):
@@ -144,34 +153,52 @@ class Analyzer:
         self.smooth=raw_angle if self.smooth is None else self.smooth+alpha*(raw_angle-self.smooth)
         a=self.smooth
         if self.state=="waiting_for_rest":
-            self.rest_since = (t if self.rest_since is None else self.rest_since) if a<=c.rest_max_deg else None
+            in_rest=c.rest_min_deg<=a<=c.rest_max_deg
+            self.rest_since = (t if self.rest_since is None else self.rest_since) if in_rest else None
             if self.rest_since is not None and t-self.rest_since>=c.rest_dwell_s:
                 self.state="rest"
         elif self.state=="rest":
             if a>=c.start_deg:
-                self.active={"start_s":t,"min_deg":a,"max_deg":a,"peak_s":t,
-                             "hold_start":None,"max_hold_s":0.,"return_start":None,"rest_start":None,"bridged_gaps":0}
-                self.state="extending"
+                if self.start_since is None:self.start_since=t
+                if t-self.start_since>=c.start_dwell_s:
+                    self.active={"start_s":self.start_since,"min_deg":a,"max_deg":a,"peak_s":t,
+                                 "target_candidate_start":None,"target_reached":False,
+                                 "hold_start":None,"max_hold_s":0.,"reversal_start":None,
+                                 "return_start":None,"return_min":None,"rest_start":None,"bridged_gaps":0}
+                    self.start_since=None;self.state="extending"
+            else:self.start_since=None
         else:
             r=self.active
+            if c.attempt_timeout_s and t-r["start_s"]>=c.attempt_timeout_s:
+                self.abort(t,"attempt_timeout")
+                return self.snapshot(t,a,"reliable")
             r["min_deg"]=min(r["min_deg"],a)
             if a>r["max_deg"]:
                 r["max_deg"],r["peak_s"]=a,t
             if self.state in ("extending","holding"):
                 if a>=c.target_deg:
-                    if r["hold_start"] is None:
-                        r["hold_start"]=t
-                    self.state="holding"
-                if r["hold_start"] is not None:
-                    if a>=c.target_deg-c.hysteresis_deg:
-                        r["max_hold_s"]=max(r["max_hold_s"],t-r["hold_start"])
-                    else:
-                        r["hold_start"]=None
+                    if r["target_candidate_start"] is None:r["target_candidate_start"]=t
+                    if t-r["target_candidate_start"]>=c.target_dwell_s:
+                        was_reached=r["target_reached"]
+                        r["target_reached"]=True
+                        if r["hold_start"] is None:r["hold_start"]=t if was_reached else r["target_candidate_start"]
+                        self.state="holding"
+                elif not r["target_reached"]:
+                    r["target_candidate_start"]=None;r["hold_start"]=None
+                if r["target_reached"] and r["hold_start"] is not None:
+                    if a>=c.target_deg-c.hysteresis_deg:r["max_hold_s"]=max(r["max_hold_s"],t-r["hold_start"])
+                    else:r["hold_start"]=None
                 if r["max_deg"]-a>=c.reversal_deg:
-                    self.state="returning"
-                    r["return_start"]=t
+                    if r["reversal_start"] is None:r["reversal_start"]=t
+                    if t-r["reversal_start"]>=c.reversal_dwell_s:
+                        self.state="returning";r["return_start"]=r["reversal_start"];r["return_min"]=a
+                else:r["reversal_start"]=None
             if self.state=="returning":
-                if a>c.rest_max_deg:
+                r["return_min"]=a if r["return_min"] is None else min(r["return_min"],a)
+                if c.reversal_dwell_s and a-r["return_min"]>=c.reversal_deg:
+                    self.state="holding" if r["target_reached"] and a>=c.target_deg-c.hysteresis_deg else "extending"
+                    r["reversal_start"]=None;r["return_start"]=None;r["return_min"]=None;r["rest_start"]=None
+                elif not c.rest_min_deg<=a<=c.rest_max_deg:
                     r["rest_start"]=None
                 else:
                     if r["rest_start"] is None:
@@ -179,15 +206,20 @@ class Analyzer:
                     if t-r["rest_start"]>=c.rest_dwell_s:
                         if r["max_deg"]-r["min_deg"]>=c.min_excursion_deg:
                             end=r["rest_start"]
+                            time_to_target=(None if not r["target_reached"] else r["target_candidate_start"]-r["start_s"])
+                            cycle_duration=end-r["start_s"]
                             self.reps.append({"index":len(self.reps)+1,"start_s":r["start_s"],"end_s":end,
                                 "min_included_deg":r["min_deg"],"max_included_deg":r["max_deg"],
                                 "extension_to_first_peak_s":None if r["bridged_gaps"] else r["peak_s"]-r["start_s"],
+                                "time_to_target_s":None if r["bridged_gaps"] else time_to_target,
                                 "target_hold_s":r["max_hold_s"],
                                 "return_s":None if r["bridged_gaps"] else max(0,end-r["return_start"]),
+                                "cycle_duration_s":cycle_duration,
                                 "bridged_gaps":r["bridged_gaps"],
                                 "needs_review":bool(r["bridged_gaps"]),
-                                "target_comparison":{"amplitude_met":r["max_deg"]>=c.target_deg,
+                                "target_comparison":{"amplitude_met":r["target_reached"],
                                     "hold_met":r["max_hold_s"]>=c.min_hold_s,
+                                    "extension_time_met":None if r["bridged_gaps"] or time_to_target is None else time_to_target>=1,
                                     "return_time_met":None if r["bridged_gaps"] else end-r["return_start"]>=c.min_return_s}})
                         else:
                             self.interrupted.append({"start_s":r["start_s"],"end_s":t,"reason":"excursion_too_small"})

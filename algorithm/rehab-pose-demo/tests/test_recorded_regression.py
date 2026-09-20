@@ -8,7 +8,7 @@ from rehab_pose.core import Config
 
 
 class RecordedRegressionTests(unittest.TestCase):
-    def test_previously_working_measurements_still_produce_three_reps(self):
+    def test_legacy_recording_is_reinterpreted_by_v01_rules(self):
         p=Path(__file__).resolve().parents[1]/'results/20260917_221040_390174'
         if not (p/'frames.jsonl').exists():self.skipTest('Local reference recording not distributed')
         s=json.loads((p/'summary.json').read_text(encoding='utf8'))
@@ -21,7 +21,8 @@ class RecordedRegressionTests(unittest.TestCase):
                 if t>31:break
                 o=m.update(t,r,r['frame_size']['width'],r['frame_size']['height'],a.state)
                 a.update(t,r,o,r.get('bridge_pending',False));events.extend(o['feedback_events'])
-        self.assertEqual(len(a.reps),3)
-        self.assertIn('KNEE_TOO_FAST',[e['code'] for e in events])
+        # One old cycle did not return to the new baseline band and is no longer counted.
+        self.assertEqual(len(a.reps),2)
+        self.assertNotIn('KNEE_TOO_FAST',[e['code'] for e in events])
         self.assertIn('TRUNK_FORWARD',[e['code'] for e in events])
         self.assertTrue(all(not r['target_comparison']['hold_met'] for r in a.reps))

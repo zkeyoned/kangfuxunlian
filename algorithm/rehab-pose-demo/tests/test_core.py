@@ -86,6 +86,42 @@ class CoreTests(unittest.TestCase):
         with self.assertRaises(ValueError):
             Config(min_hold_s=-1)
 
+    def test_v01_seated_extension_timing_and_output_fields(self):
+        c=Config(rest_min_deg=80,rest_max_deg=100,start_deg=100,target_deg=170,
+                 hysteresis_deg=5,reversal_deg=5,min_hold_s=5,min_return_s=1,
+                 rest_dwell_s=.5,start_dwell_s=.2,target_dwell_s=.2,
+                 reversal_dwell_s=.2,smoothing_tau_s=0,attempt_timeout_s=30)
+        a=Analyzer(c);t=0.;step=.05
+        def feed(value,duration):
+            nonlocal t
+            end=t+duration
+            while t<end-1e-9:
+                a.update(round(t,6),value);t+=step
+        feed(90,1)
+        # About 2.5 seconds from the start threshold to the 170-degree target.
+        for i in range(51):
+            a.update(round(t,6),100+70*i/50);t+=step
+        feed(170,5.2)
+        for i in range(51):
+            a.update(round(t,6),170-80*i/50);t+=step
+        feed(90,.7)
+        self.assertEqual(len(a.reps),1)
+        rep=a.reps[0]
+        self.assertTrue(rep['target_comparison']['amplitude_met'])
+        self.assertTrue(rep['target_comparison']['hold_met'])
+        self.assertTrue(rep['target_comparison']['extension_time_met'])
+        self.assertTrue(rep['target_comparison']['return_time_met'])
+        self.assertGreaterEqual(rep['time_to_target_s'],1)
+        self.assertGreaterEqual(rep['target_hold_s'],5)
+        self.assertGreater(rep['cycle_duration_s'],rep['target_hold_s'])
+
+    def test_v01_start_requires_continuous_confirmation(self):
+        a=Analyzer(Config(rest_min_deg=80,rest_max_deg=100,start_deg=100,target_deg=170,
+                          start_dwell_s=.2,smoothing_tau_s=0))
+        sequence(a,[90]*12+[105]*3+[90]*3,step=.05)
+        self.assertIsNone(a.active)
+        self.assertEqual(a.state,'rest')
+
 
 if __name__=="__main__":
     unittest.main()

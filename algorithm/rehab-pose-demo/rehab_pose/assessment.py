@@ -18,6 +18,10 @@ def assess(summary, rows):
                     r.get('measurement_source') != 'predicted' and not r.get('bridge_pending')
                     and r.get('measurement_metrics', {}).get('knee_included_deg') is not None]
         angles = [r['measurement_metrics']['knee_included_deg'] for r in observed]
+        observed_ids={id(r) for r in observed}
+        valid_duration=sum(max(0,b['timestamp_s']-a['timestamp_s']) for a,b in zip(samples,samples[1:])
+                           if id(a) in observed_ids)
+        attempt_duration=max(0,rep['end_s']-rep['start_s'])
         predicted = sum(bool(r.get('bridge_pending')) for r in samples)
         gaps = any(b['timestamp_s']-a['timestamp_s'] > params.get('max_gap_s', .3)
                    for a, b in zip(samples, samples[1:]))
@@ -31,34 +35,45 @@ def assess(summary, rows):
         metrics = {'observed_min_knee_deg': min(angles) if angles else None,
                    'observed_max_knee_deg': max(angles) if angles else None,
                    'observed_excursion_deg': max(angles)-min(angles) if angles else None,
-                   'target_hold_s': rep.get('target_hold_s'), 'return_s': rep.get('return_s')}
+                   'knee_start_deg':rep.get('knee_start_deg'), 'knee_peak_deg':rep.get('knee_peak_deg'),
+                   'knee_excursion_deg':rep.get('knee_excursion_deg'),
+                   'time_to_target_s':rep.get('time_to_target_s'),
+                   'target_hold_s': rep.get('target_hold_s'), 'return_s': rep.get('return_s'),
+                   'cycle_duration_s':rep.get('cycle_duration_s'),
+                   'valid_time_ratio':min(1,valid_duration/attempt_duration) if attempt_duration else None}
         checks = []
         for key, label, actual, target in [
             ('amplitude', '伸膝幅度', metrics['observed_max_knee_deg'], params['target_deg']),
             ('hold', '连续保持时间', metrics['target_hold_s'], params['min_hold_s']),
+            ('extension_time', '伸出用时', metrics['time_to_target_s'], 1),
             ('return', '返回用时', metrics['return_s'], params['min_return_s'])]:
-            unknown = uncertain or not supported or actual is None
-            status = 'unable_to_assess' if unknown else ('met' if actual >= target else 'not_met')
+            target_not_reached=key=='extension_time' and actual is None and not uncertain
+            unknown = uncertain or not supported or (actual is None and not target_not_reached)
+            status = 'unable_to_assess' if unknown else ('not_met' if target_not_reached else 'met' if actual >= target else 'not_met')
             checks.append({'metric': key, 'label': label, 'measured': actual,
                            'target_min': target if supported else None,
                            'unit': 'deg' if key == 'amplitude' else 's', 'status': status,
                            'reason': ('当前报告仅支持动作1' if not supported else
                                       '动作未完整完成或测量不连续，需复核' if unknown else
+                                      '未到达目标角度，无法形成到达目标用时' if target_not_reached else
                                       '达到设置目标' if status == 'met' else '未达到设置目标')})
         overall = ('unable_to_assess' if any(c['status']=='unable_to_assess' for c in checks)
                    else 'not_met' if any(c['status']=='not_met' for c in checks) else 'met')
         items.append({'attempt': len(items)+1, 'completed_rep_index': rep.get('index'),
                       'start_s': rep['start_s'], 'end_s': rep['end_s'], 'completed': completed,
+                      'target_completed':bool(rep.get('target_completed')) if completed else False,
                       'interruption_reason': rep.get('reason'), 'quality': quality,
                       'measurements': metrics, 'checks': checks, 'status': overall})
-    return {'schema_version': '1.0', 'rule_version': 'seated-extension-report-1',
+    return {'schema_version': '1.1', 'rule_version': 'seated-extension-v0.1-report-2',
             'training_session': summary.get('training_session'),
             'exercise': summary['exercise'], 'supported': supported,
-            'scope': '仅评估幅度、保持与返回用时，不是整体动作正确性或临床疗效判断',
+            'scope': '评估伸膝幅度、连续保持、伸出与返回用时；姿态提醒单独记录，不是临床疗效判断',
             'parameters': params, 'calibration_completed': bool(summary.get('calibrations')),
             'excursion_definition': '记录的动作开始至返回期间，可靠观测膝夹角的最大值减最小值；非完整临床活动范围',
-            'attempts': items, 'counts': {s: sum(i['status']==s for i in items)
-                                        for s in ('met', 'not_met', 'unable_to_assess')}}
+            'attempts': items, 'counts': {**{s: sum(i['status']==s for i in items)
+                                         for s in ('met', 'not_met', 'unable_to_assess')},
+                                         'completed_cycles':sum(i['completed'] for i in items),
+                                         'target_completed':sum(i['target_completed'] for i in items)}}
 
 
 def write_report(directory, summary=None):
@@ -83,6 +98,8 @@ def write_report(directory, summary=None):
                   f"系统确认完整动作{progress['completed_repetitions']}次，计划状态：{state_label}。次数不代表全部达标；此处不统计每日累计训练量。",'']
     if not report['calibration_completed']: lines.append('未完成初始标定，不能据此判断训练合格。')
     if not report['attempts']: lines.append('未记录到可报告的动作尝试。')
+    if report['attempts']:
+        lines += [f"完整动作 {report['counts']['completed_cycles']} 次；达到目标角度并连续保持达标 {report['counts']['target_completed']} 次。",'']
     if report['feedback_events']:
         lines += ['','## 实际提醒','']
         for event in report['feedback_events']:lines.append(f"- {event['timestamp_s']:.2f}秒：{event['message']}")

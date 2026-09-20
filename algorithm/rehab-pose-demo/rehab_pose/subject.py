@@ -51,7 +51,7 @@ class SubjectLock:
         if any(i!=j and iou(b,other)>.10 for j,other in enumerate(self.boxes)):return None
         return i
 
-    def update(self,boxes,features):
+    def update(self,boxes,features,timestamp_s=None):
         self.boxes=[np.asarray(b[:4],float) for b in boxes]
         self.features=[np.asarray(f,float) for f in features]
         if self.status=='locked':

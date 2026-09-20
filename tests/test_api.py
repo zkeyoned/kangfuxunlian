@@ -19,10 +19,18 @@ def ok(r, code=200):
     return r.json() if r.headers.get("content-type", "").startswith("application/json") else r.text
 
 
+def login_demo(username,password):
+    result=c.post('/api/v1/auth/login',json={'username':username,'password':password})
+    if result.status_code==403 and result.json().get('code')=='PASSWORD_RESET_REQUIRED':
+        new_password=password+'2026'
+        ok(c.post('/api/v1/auth/change-password',json={'username':username,'old_password':password,'new_password':new_password}))
+        result=c.post('/api/v1/auth/login',json={'username':username,'password':new_password})
+    return ok(result)
+
 print("健康检查", ok(c.get("/healthz")))
 
 # ---- 患者端闭环 ----
-tok = ok(c.post("/api/v1/auth/login", json={"username": "p.zhang", "password": "zhang123"}))["token"]
+tok = login_demo("p.zhang", "zhang123")["token"]
 P = {"Authorization": f"Bearer {tok}"}
 today = ok(c.get("/api/v1/me/plan/today", headers=P))
 assert today["plan"], "患者应有激活计划"
@@ -56,7 +64,7 @@ tr = ok(c.get("/api/v1/me/trend", params={"exercise": "KNEE_FLEX"}, headers=P))
 print("趋势点数", len(tr), "最新", tr[-1])
 
 # ---- 康复师端 ----
-tok = ok(c.post("/api/v1/auth/login", json={"username": "dr.lin", "password": "lin123"}))["token"]
+tok = login_demo("dr.lin", "lin123")["token"]
 T = {"Authorization": f"Bearer {tok}"}
 pts = ok(c.get("/api/v1/patients", headers=T))
 assert len(pts) >= 2
@@ -88,7 +96,7 @@ assert c.post(f"/api/v1/rules/{rid}/activate", headers=T).status_code == 409
 print("规则双人审核闸门 ✓")
 
 # 管理员审计
-tok = ok(c.post("/api/v1/auth/login", json={"username": "admin", "password": "admin123"}))["token"]
+tok = login_demo("admin", "admin123")["token"]
 aud = ok(c.get("/api/v1/audit", params={"limit": 5}, headers={"Authorization": f"Bearer {tok}"}))
 print("审计最近", [a["action"] for a in aud])
 print("\n全部通过 ✓")

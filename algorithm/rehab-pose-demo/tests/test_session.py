@@ -26,7 +26,7 @@ class SessionTests(unittest.TestCase):
         s.toggle_pause(2);s.record_rep(3,{'index':2});self.assertEqual(s.total,1)
 
     def test_invalid_plan(self):
-        for args in [(0,10,2),(3,0,2),(3,10,1),(3,10,float('nan')),(True,10,2)]:
+        for args in [(0,10,2),(3,0,2),(3,10,-1),(3,10,float('nan')),(True,10,2)]:
             with self.assertRaises(ValueError):TrainingPlan(*args)
 
     def test_nonqualified_cycle_counts_as_performed(self):

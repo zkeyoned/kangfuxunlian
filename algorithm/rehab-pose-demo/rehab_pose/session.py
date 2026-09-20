@@ -15,10 +15,10 @@ class TrainingPlan:
             value=getattr(self,name)
             if type(value) is not int or not 1<=value<=maximum:
                 raise ValueError(f'{name} must be an integer in 1..{maximum}')
-        if not math.isfinite(self.hold_s) or self.hold_s not in (0,2,2.5,3,5):
+        if type(self.hold_s) not in (int,float) or not math.isfinite(self.hold_s) or not 0<=self.hold_s<=30:
             raise ValueError('不支持的保持时间')
-        if not math.isfinite(self.rest_s) or self.rest_s!=30:
-            raise ValueError('当前组间休息固定30秒')
+        if type(self.rest_s) not in (int,float) or not math.isfinite(self.rest_s) or not 0<=self.rest_s<=300:
+            raise ValueError('组间休息应在0–300秒之间')
 
 
 class TrainingSession:
