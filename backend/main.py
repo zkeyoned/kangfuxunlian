@@ -137,14 +137,14 @@ class LoginIn(BaseModel):
 
 
 def valid_password(value):
-    return 8<=len(value)<=15 and bool(re.search(r"[A-Za-z]",value)) and bool(re.search(r"[0-9]",value))
+    return 5<=len(value)<=15 and bool(re.search(r"[A-Za-z]",value)) and bool(re.search(r"[0-9]",value))
 
 class PasswordPolicy(BaseModel):
     password: str
     @field_validator("password")
     @classmethod
     def validate_password(cls,value):
-        if not valid_password(value):raise ValueError("密码须为8–15位，且同时包含字母和数字")
+        if not valid_password(value):raise ValueError("密码须为5–15位，且同时包含字母和数字")
         return value
 
 class ChangePasswordIn(BaseModel):
@@ -158,7 +158,7 @@ class ChangePasswordIn(BaseModel):
 
 class RegisterIn(PasswordPolicy):
     username: str = Field(max_length=254)
-    password: str = Field(min_length=8, max_length=15)
+    password: str = Field(min_length=5, max_length=15)
     display_name: str = Field(min_length=1, max_length=50)
     role: str = "patient"
 
@@ -397,7 +397,7 @@ def login(body: LoginIn, request: Request, con=Depends(get_con)):
         db.audit(con, None, "login.fail", f"user:{body.username}", ip=request.client.host if request.client else None)
         raise HTTPException(401, "用户名或密码错误")
     if not valid_password(body.password):
-        return JSONResponse(status_code=403,content={"error":"原密码不符合新规则，请重新设置8–15位且包含字母和数字的密码", "code":"PASSWORD_RESET_REQUIRED"})
+        return JSONResponse(status_code=403,content={"error":"原密码不符合新规则，请重新设置5–15位且包含字母和数字的密码", "code":"PASSWORD_RESET_REQUIRED"})
     tok = db.issue_token(con, u["id"])
     db.audit(con, u["id"], "login", None, ip=request.client.host if request.client else None)
     out = {k: u[k] for k in ("id", "role", "display_name", "institution_id", "username")}

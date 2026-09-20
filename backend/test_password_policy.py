@@ -8,12 +8,12 @@ from fastapi.testclient import TestClient
 class PasswordTests(unittest.TestCase):
     def test_policy_and_authenticated_change(self):
         db.init_db();c=TestClient(app)
-        for pw in ['abcdefghi','123456789','abc1234','abcdefghijklm123','abc1234567890123']:
+        for pw in ['abcdefghi','123456789','ab12','abcdefghijklm123','abc1234567890123']:
             r=c.post('/api/v1/auth/register',json={'username':'policy@example.test','display_name':'测试','password':pw})
             self.assertEqual(r.status_code,422,(pw,r.text))
         self.assertEqual(c.post('/api/v1/auth/register',json={'username':'policy@example.test','display_name':'测试','password':'Abcd1234'}).status_code,201)
         r=c.post('/api/v1/auth/login',json={'username':'dr.lin','password':'lin123'})
-        self.assertEqual(r.status_code,403);self.assertEqual(r.json()['code'],'PASSWORD_RESET_REQUIRED');self.assertNotIn('token',r.json())
+        self.assertEqual(r.status_code,200,r.text)
         self.assertEqual(c.post('/api/v1/auth/login',json={'username':'dr.lin','password':'wrong'}).status_code,401)
         with closing(db.connect()) as con:
             uid=con.execute("SELECT id FROM users WHERE username='dr.lin'").fetchone()[0]
@@ -28,6 +28,9 @@ class PasswordTests(unittest.TestCase):
         self.assertEqual(c.post('/api/v1/auth/login',json={'username':'dr.lin','password':'lin123'}).status_code,401)
         r=c.post('/api/v1/auth/login',json={'username':'dr.lin','password':'Newpass123'});self.assertEqual(r.status_code,200)
         self.assertEqual(c.post('/api/v1/patients',headers={'Authorization':'Bearer '+r.json()['token']},json={'username':'invalid','password':'abc','display_name':'测试'}).status_code,422)
+        for idx,pw in enumerate(['ab123','Abcd12345678901']):
+            response=c.post('/api/v1/auth/register',json={'username':f'boundary{idx}@example.test','display_name':'边界测试','password':pw})
+            self.assertEqual(response.status_code,201,response.text)
         c.close()
 
 if __name__=='__main__':unittest.main()
