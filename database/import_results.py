@@ -28,6 +28,15 @@ COMPENSATION_FLAG 几个常量和各函数的注释里，不要在这个脚本�
 已经拍板。原型的逐条提示事件（feedback_events）原样落进新表 session_events，供以后回放或做别的
 判定逻辑用，不因为这次不拿它算分就丢掉。
 
+20260921 rebase 到 PR #17 之后的适配（细节见 docs/decisions/0002 同名小节）：
+原型 summary.json 新增了 `contract_reps`（docs/03-接口契约.md A 节要求的扁平 rep：rep_index /
+peak_angle / duration_ms / valid / flags），由原型自己按 rehab_pose/contract.py 折算。有这一段
+时本脚本**优先**用它填 `reps` 表的 peak_angle / duration_ms / valid / flags_json，不再自己从
+feedback_events 推 flags；没有这一段（老结果目录）时走原来的逻辑，行为不变。两点例外写在
+`build_session_item` 的注释里：`reps.rep_index` 仍存组内序号（要和 `session_events.rep_index`
+对齐），`contract_reps.rep_index` 只当连接键用；`peak_angle` 为空时（动作 2/6 的相对量指标原型
+的契约折算取不到）退回本脚本的 `primary_peak`。
+
 20260919 按队友（后端与视觉算法）审查意见修正四处，细节见 docs/decisions/0002：
 1. compensation_count 口径统一为「每次动作内、非速度类、按提示代号去重的类型数，再按组求和」，
    同一次动作里同一个提示出现两次只算一次（session_events 里仍然逐条保留）。
@@ -265,6 +274,54 @@ def rep_compensation_codes(events: list) -> list[str]:
         if code not in codes:
             codes.append(code)
     return codes
+
+
+def index_contract_reps(summary: dict) -> dict:
+    """summary.contract_reps（PR #17 新增）按 rep_index 建索引，供逐次动作查找。
+
+    contract_reps 是原型自己按 rehab_pose/contract.py 折算出来的扁平 rep，字段就是
+    docs/03-接口契约.md A 节那五个：rep_index / peak_angle / duration_ms / valid / flags。
+    它的 rep_index 是原型的**全局**动作序号（repetitions[i]['index']），不是组内序号，
+    所以这里只拿它当连接键，落库的 reps.rep_index 仍旧用组内序号（见 _stored_rep_index）。
+    老的结果目录没有这一段，返回空字典，调用方自动退回原逻辑。
+    """
+    out = {}
+    for item in summary.get("contract_reps") or []:
+        index = item.get("rep_index")
+        if index is not None:
+            out[index] = item
+    return out
+
+
+def contract_rep_fields(contract: dict | None, *, rep: dict, exercise_code: str, events: list):
+    """一次动作最终落 reps 表的四个值：有 contract_reps 就优先用它，缺项才退回本脚本算法。
+
+    退回的两种情况都是原型那边"契约折算取不到"，不是这里不信它：
+    1. peak_angle 为空：contract.py 取的是 knee_peak_deg/max_included_deg，动作 2
+       （SLR）、动作 6（SQUAT）的主指标是相对初始方向的变化量，exercises.py 把
+       max_included_deg 改名成了 max_motion_delta_deg，契约折算这一项就是 None。
+       这时退回 primary_peak，口径和 RELATIVE_ANGLE_EXERCISES 那条注释一致。
+    2. 整条 contract 缺失（老结果目录，summary 里没有 contract_reps）：四项全退回。
+
+    flags 直接采信 contract（原型同时看了 target_comparison 和 feedback_events，比这里只看
+    feedback_events 更全）；valid 同理。compensation_count 不从 flags 走，仍按提示**代号**
+    去重统计（口径见 rep_compensation_codes），contract 的 flags 已经把代号合并成枚举，
+    还原不出代号。
+    """
+    fallback_peak = primary_peak(exercise_code, rep)
+    fallback_duration = int(round((rep["end_s"] - rep["start_s"]) * 1000))
+    if not contract:
+        return (fallback_peak, fallback_duration, rep_is_valid(rep, events),
+                rep_flags(events), False)
+    peak = contract.get("peak_angle")
+    duration = contract.get("duration_ms")
+    valid = contract.get("valid")
+    flags = contract.get("flags")
+    return (fallback_peak if peak is None else peak,
+            fallback_duration if duration is None else int(duration),
+            rep_is_valid(rep, events) if valid is None else bool(valid),
+            rep_flags(events) if flags is None else list(flags),
+            True)
 
 
 def rep_is_valid(rep: dict, events: list) -> bool:
@@ -521,7 +578,8 @@ def compute_contract_d_score(*, reps_valid, reps_target, reps_done, peak_angle_m
     dims = {"completion": completion, "amplitude": amplitude, "posture": posture, "tempo": tempo, "stability": stability}
     breakdown = {k: round(100 * score_weights.get(k, DEFAULT_SCORE_WEIGHTS[k]) * v, 2) for k, v in dims.items()}
     breakdown["score_mode"] = "contract-d"
-    quality_score = round(sum(v for k, v in breakdown.items() if k != "score_mode"), 2)
+    # 只累加数值维度：breakdown 里还会被调用方补 score_mode / rep_source 这类字符串备注键。
+    quality_score = round(sum(v for v in breakdown.values() if isinstance(v, (int, float))), 2)
     return quality_score, breakdown
 
 
@@ -647,6 +705,8 @@ def build_session_item(*, exercise_code, set_index, reps, rows, summary, assessm
     status_unknown=True（summary.status 不在已知映射表里）时，这一组一并标 needs_review=1。
     """
     feedback_events = summary.get("feedback_events", [])
+    # PR #17 起原型自己产出契约 A 节的扁平 rep，有就优先用（见 contract_rep_fields）。
+    contract_by_index = index_contract_reps(summary)
     effective_parameters = summary.get("effective_parameters") or summary.get("configuration") or {}
     rest_angle, target_angle = rest_target_angles(exercise_code, effective_parameters)
 
@@ -661,10 +721,13 @@ def build_session_item(*, exercise_code, set_index, reps, rows, summary, assessm
     too_fast_count = 0
     compensation_count = 0
     any_needs_review = False
+    contract_rep_used = 0
     for rep in reps:
         events = events_in_window(feedback_events, rep["start_s"], rep["end_s"])
-        flags = rep_flags(events)
-        valid = rep_is_valid(rep, events)
+        peak_angle, duration_ms_rep, valid, flags, from_contract = contract_rep_fields(
+            contract_by_index.get(rep.get("index")), rep=rep,
+            exercise_code=exercise_code, events=events)
+        contract_rep_used += 1 if from_contract else 0
         if valid:
             reps_valid_count += 1
         if "too_fast" in flags:
@@ -675,9 +738,11 @@ def build_session_item(*, exercise_code, set_index, reps, rows, summary, assessm
         needs_review = bool(rep.get("needs_review"))
         any_needs_review = any_needs_review or needs_review
         rep_rows.append({
+            # rep_index 一律存组内序号，contract_reps 自带的是全局序号，只当连接键用，
+            # 直接存进来会和 session_events.rep_index 对不上（见 _stored_rep_index）。
             "rep_index": rep.get("rep_in_set", rep.get("index")),
-            "peak_angle": primary_peak(exercise_code, rep),
-            "duration_ms": int(round((rep["end_s"] - rep["start_s"]) * 1000)),
+            "peak_angle": peak_angle,
+            "duration_ms": duration_ms_rep,
             "valid": 1 if valid else 0,
             "flags_json": json.dumps(flags, ensure_ascii=False),
             "hold_s": rep.get("target_hold_s"),
@@ -688,8 +753,8 @@ def build_session_item(*, exercise_code, set_index, reps, rows, summary, assessm
 
     reps_done = len(reps)
     zero_completed_reps = reps_done == 0
-    peaks = [primary_peak(exercise_code, r) for r in reps]
-    peaks = [p for p in peaks if p is not None]
+    # 组级峰值和 reps 表同源：contract_reps 在场时用的是它给的 peak_angle。
+    peaks = [rr["peak_angle"] for rr in rep_rows if rr["peak_angle"] is not None]
     peak_angle_max = max(peaks) if peaks else None
     peak_angle_mean = statistics.fmean(peaks) if peaks else None
     duration_ms = sum(rr["duration_ms"] for rr in rep_rows)
@@ -732,6 +797,13 @@ def build_session_item(*, exercise_code, set_index, reps, rows, summary, assessm
             capture_quality=capture_quality,
             capture_quality_completed_reps=capture_quality_completed_reps,
         )
+
+    score_breakdown["rep_source"] = (
+        "summary.contract_reps" if contract_rep_used else "summary.repetitions")
+    if contract_rep_used and contract_rep_used != reps_done:
+        # 部分动作在 contract_reps 里找不到（原型输出不完整），留个痕迹给人工看。
+        score_breakdown["rep_source"] = "mixed"
+        score_breakdown["contract_reps_matched"] = contract_rep_used
 
     item = {
         "exercise_code": exercise_code,

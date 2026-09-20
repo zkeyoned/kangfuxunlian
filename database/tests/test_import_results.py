@@ -124,6 +124,8 @@ class TestImportResults(unittest.TestCase):
         self.assertEqual(breakdown["reps_target"], 1)
         self.assertIn("compensation_event_count", breakdown)
         self.assertIn("too_fast_event_count", breakdown)
+        self.assertEqual(breakdown["rep_source"], "summary.repetitions",
+                          "老样例没有 contract_reps，应退回本脚本原来的逐次动作算法")
 
         reps = con.execute(
             "SELECT * FROM reps WHERE session_item_id=?", (item["id"],)
@@ -157,7 +159,8 @@ class TestImportResults(unittest.TestCase):
         breakdown = json.loads(item["score_breakdown_json"])
         self.assertEqual(breakdown["score_mode"], "contract-d")
         self.assertNotIn("provisional", breakdown)
-        points = sum(v for k, v in breakdown.items() if k != "score_mode")
+        # score_mode / rep_source 这类字符串备注键不参与求和，只累加数值维度。
+        points = sum(v for v in breakdown.values() if isinstance(v, (int, float)))
         self.assertAlmostEqual(points, item["quality_score"], places=2)
         con.close()
 
@@ -476,6 +479,168 @@ class TestReviewFixes(unittest.TestCase):
         item = con.execute("SELECT * FROM session_items WHERE session_id=?", (session_id,)).fetchone()
         self.assertEqual(item["needs_review"], 0, "状态已知、没有补帧，不该平白标复核")
         con.close()
+
+
+class TestContractReps(unittest.TestCase):
+    """PR #17 起 summary.json 多了 contract_reps（契约 A 节的扁平 rep），本组测「有就优先用」。
+
+    重点是三条：
+    1. contract_reps 在场时，reps 表的 peak_angle / duration_ms / valid / flags_json 全部采信它，
+       哪怕和本脚本自己从 feedback_events 推出来的结论不一样。
+    2. rep_index 仍存组内序号（contract_reps 给的是全局序号，只当连接键），
+       否则 session_events.rep_index 会对不上。
+    3. contract_reps 里 peak_angle 为空（动作 2 / 6 的相对量指标，原型契约折算取不到）时，
+       这一项退回 primary_peak，不能把 peak_angle_max 写成 NULL。
+    """
+
+    def setUp(self):
+        self.tmp = Path(tempfile.mkdtemp())
+        self.db_path = self.tmp / "test.sqlite3"
+        _fixture_db(self.db_path)
+        con = ir.open_db(self.db_path)
+        con.execute(
+            "INSERT INTO exercises(code,name,joint,metric,direction,camera_side,description) "
+            "VALUES('SLR','直腿抬高','髋','hip_angle','up','side','test fixture')"
+        )
+        con.commit()
+        con.close()
+
+    def tearDown(self):
+        shutil.rmtree(self.tmp, ignore_errors=True)
+
+    def _connect(self):
+        con = sqlite3.connect(self.db_path)
+        con.row_factory = sqlite3.Row
+        return con
+
+    def _import(self, summary, rows, **kwargs):
+        run_dir = _write_run(self.tmp / f"run_{len(list(self.tmp.iterdir()))}", summary, rows)
+        params = dict(patient_id=1, plan_id=None, plan_item_id=None,
+                      db_path=self.db_path, dry_run=False)
+        params.update(kwargs)
+        return ir.import_run(run_dir, **params)
+
+    def test_contract_reps_take_priority_over_local_derivation(self):
+        """原型说这一次不合格、幅度不足，本脚本自己按 feedback_events 推会判成合格：以原型为准。"""
+        summary = _base_summary(
+            repetitions=[{"index": 1, "start_s": 10.0, "end_s": 13.0, "max_included_deg": 150,
+                          "target_comparison": {"amplitude_met": True}}],
+            contract_reps=[{"rep_index": 1, "peak_angle": 152.5, "duration_ms": 2900,
+                            "valid": False, "flags": ["amplitude_low", "trunk_lean"]}],
+        )
+        session_id = self._import(summary, _frames(0.0, 14.0))
+        con = self._connect()
+        item = con.execute("SELECT * FROM session_items WHERE session_id=?", (session_id,)).fetchone()
+        rep = con.execute("SELECT * FROM reps WHERE session_item_id=?", (item["id"],)).fetchone()
+        self.assertAlmostEqual(rep["peak_angle"], 152.5)
+        self.assertEqual(rep["duration_ms"], 2900, "用 contract_reps 给的时长，不再自己按 end_s-start_s 算")
+        self.assertEqual(rep["valid"], 0, "原型判不合格，就落不合格")
+        self.assertEqual(json.loads(rep["flags_json"]), ["amplitude_low", "trunk_lean"])
+        self.assertEqual(item["reps_valid"], 0)
+        self.assertAlmostEqual(item["peak_angle_max"], 152.5, msg="组级峰值和 reps 表同源")
+        breakdown = json.loads(item["score_breakdown_json"])
+        self.assertEqual(breakdown["rep_source"], "summary.contract_reps")
+        con.close()
+
+    def test_contract_rep_index_is_join_key_only(self):
+        """contract_reps.rep_index 是全局序号；落库的 reps.rep_index 必须还是组内序号，
+        并且和 session_events.rep_index 对得上。"""
+        summary = _base_summary(
+            repetitions=[
+                {"index": 1, "start_s": 10.0, "end_s": 13.0, "training_set": 1, "rep_in_set": 1,
+                 "max_included_deg": 150, "target_comparison": {"amplitude_met": True}},
+                {"index": 2, "start_s": 20.0, "end_s": 23.0, "training_set": 2, "rep_in_set": 1,
+                 "max_included_deg": 155, "target_comparison": {"amplitude_met": True}},
+            ],
+            feedback_events=[{"code": "TRUNK_FORWARD", "message": "前倾", "timestamp_s": 21.0,
+                              "level": "notice", "rep_index": 2}],
+            contract_reps=[
+                {"rep_index": 1, "peak_angle": 150, "duration_ms": 3000, "valid": True, "flags": []},
+                {"rep_index": 2, "peak_angle": 155, "duration_ms": 3000, "valid": True,
+                 "flags": ["trunk_lean"]},
+            ],
+        )
+        session_id = self._import(summary, _frames(0.0, 24.0))
+        con = self._connect()
+        items = con.execute(
+            "SELECT * FROM session_items WHERE session_id=? ORDER BY set_index", (session_id,)).fetchall()
+        self.assertEqual(len(items), 2)
+        second = items[1]
+        rep = con.execute("SELECT * FROM reps WHERE session_item_id=?", (second["id"],)).fetchone()
+        self.assertEqual(rep["rep_index"], 1, "全局第 2 次动作在第 2 组里是组内第 1 次")
+        self.assertEqual(json.loads(rep["flags_json"]), ["trunk_lean"], "按全局序号连接到了正确的那一条")
+        event = con.execute(
+            "SELECT * FROM session_events WHERE session_item_id=?", (second["id"],)).fetchone()
+        self.assertEqual(event["rep_index"], rep["rep_index"], "事件和动作的序号口径必须一致")
+        con.close()
+
+    def test_missing_peak_angle_falls_back_to_primary_peak(self):
+        """动作 2（SLR）的 contract 折算取不到 peak_angle（相对量指标被改名），
+        这一项退回 max_motion_delta_deg，其余三项仍采信 contract。"""
+        summary = _base_summary(
+            exercise="SUPINE_STRAIGHT_LEG_RAISE",
+            repetitions=[{"index": 1, "start_s": 10.0, "end_s": 13.0,
+                          "max_motion_delta_deg": 38.0, "phase_signal_offset_deg": 90,
+                          "target_comparison": {"amplitude_met": True}}],
+            contract_reps=[{"rep_index": 1, "peak_angle": None, "duration_ms": 3000,
+                            "valid": True, "flags": []}],
+        )
+        session_id = self._import(summary, _frames(0.0, 14.0))
+        con = self._connect()
+        item = con.execute("SELECT * FROM session_items WHERE session_id=?", (session_id,)).fetchone()
+        self.assertEqual(item["exercise_code"], "SLR")
+        rep = con.execute("SELECT * FROM reps WHERE session_item_id=?", (item["id"],)).fetchone()
+        self.assertAlmostEqual(rep["peak_angle"], 38.0, msg="peak_angle 为空时退回相对量原值，不能落 NULL")
+        self.assertAlmostEqual(item["peak_angle_max"], 38.0)
+        self.assertEqual(rep["valid"], 1)
+        con.close()
+
+    def test_without_contract_reps_behaviour_unchanged(self):
+        """没有 contract_reps 的老结果目录，逐次动作的四个值和改造前完全一致。"""
+        summary = _base_summary(
+            feedback_events=[{"code": "KNEE_TOO_FAST", "message": "太快", "timestamp_s": 11.0,
+                              "level": "notice"}],
+            repetitions=[{"index": 1, "start_s": 10.0, "end_s": 13.0, "max_included_deg": 150,
+                          "target_comparison": {"amplitude_met": True}}],
+        )
+        session_id = self._import(summary, _frames(0.0, 14.0))
+        con = self._connect()
+        item = con.execute("SELECT * FROM session_items WHERE session_id=?", (session_id,)).fetchone()
+        rep = con.execute("SELECT * FROM reps WHERE session_item_id=?", (item["id"],)).fetchone()
+        self.assertAlmostEqual(rep["peak_angle"], 150.0)
+        self.assertEqual(rep["duration_ms"], 3000)
+        self.assertEqual(rep["valid"], 0, "有 too_fast 事件，本脚本原逻辑判不合格")
+        self.assertEqual(json.loads(rep["flags_json"]), ["too_fast"])
+        breakdown = json.loads(item["score_breakdown_json"])
+        self.assertEqual(breakdown["rep_source"], "summary.repetitions")
+        con.close()
+
+    def test_partial_contract_reps_marked_mixed(self):
+        """只对上一部分动作时，rep_source 标 mixed 并记下命中数，留给人工看。"""
+        summary = _base_summary(
+            repetitions=[
+                {"index": 1, "start_s": 10.0, "end_s": 13.0, "max_included_deg": 150,
+                 "target_comparison": {"amplitude_met": True}},
+                {"index": 2, "start_s": 14.0, "end_s": 17.0, "max_included_deg": 155,
+                 "target_comparison": {"amplitude_met": True}},
+            ],
+            contract_reps=[{"rep_index": 1, "peak_angle": 150, "duration_ms": 3000,
+                            "valid": True, "flags": []}],
+        )
+        session_id = self._import(summary, _frames(0.0, 18.0))
+        con = self._connect()
+        item = con.execute("SELECT * FROM session_items WHERE session_id=?", (session_id,)).fetchone()
+        breakdown = json.loads(item["score_breakdown_json"])
+        self.assertEqual(breakdown["rep_source"], "mixed")
+        self.assertEqual(breakdown["contract_reps_matched"], 1)
+        self.assertEqual(item["reps_done"], 2, "对不上的那一次仍按原逻辑落库，不丢")
+        con.close()
+
+    def test_index_contract_reps_tolerates_missing_section(self):
+        self.assertEqual(ir.index_contract_reps({}), {})
+        self.assertEqual(ir.index_contract_reps({"contract_reps": None}), {})
+        self.assertEqual(ir.index_contract_reps({"contract_reps": [{"peak_angle": 1}]}), {},
+                          "没有 rep_index 的条目连不上任何一次动作，直接忽略")
 
 
 if __name__ == "__main__":

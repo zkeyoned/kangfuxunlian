@@ -67,6 +67,13 @@ COLUMN`**：这条语句不支持 `IF NOT EXISTS`，已经加过一次列的库�
 （`sqlite3 data/rehabtrack.sqlite3 < database/migrations/20260919-import-prep.sql` 这样）。
 `database/migrations/` 只是给旧库补课用的，不是每次启动自动跑的东西，新建库不需要碰它。
 
+别和 `backend/migrations/` 搞混：那是后端（常）在 PR #17 里加的目录，`init_db()` 会在
+`schema.sql` 之后**自动**逐个执行里面的 `*.sql`（目前六张增量表：`care_requests`、
+`training_reports`、`report_videos`、`report_video_chunks`、`visual_prescriptions`、
+`patient_training_selection`）。那六张表归后端维护，`database/` 不改它们，只保证和
+`schema.sql` 的 15 张表不重名、同一个库连跑两次 `init_db()` 不报错。`database/migrations/`
+仍然是手工执行的，不会被 `init_db()` 自动跑。
+
 ## 与后端的读写约定
 
 后端只通过 `backend/db.py` 里的函数读写数据库（`connect()`、`init_db()`、`load_seed()` 等），`backend/main.py` 不直接拼裸 SQL 语句操作核心表以外的逻辑。新增查询优先在 `db.py` 里加辅助函数，保持数据库访问集中在一处，方便以后换 PostgreSQL 时只改一个文件。

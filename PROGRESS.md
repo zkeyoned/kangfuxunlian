@@ -38,7 +38,7 @@
 - [x] 演示数据（seed） — 负责人：数据库（得） · 已完成 · 更新日期：2026-09-16
 - [x] database/ 与 backend/db.py 的路径对接（schema 与种子数据路径） — 负责人：后端与视觉算法（常） · 配合：得 · 已完成 · 更新日期：2026-09-16
 - [x] 姿态识别原型（v0.6）落库映射分析 — 负责人：数据库（得） · 已完成 · 更新日期：2026-09-18
-- [ ] 训练记录离线导入（`database/import_results.py` + schema 迁移列 + `session_events` 逐条提示事件 + `SEATED_KNEE_EXTENSION` 动作 + 4 版 `v0.6-proto` 规则）— 负责人：数据库（得） · 脚本与测试已跑通（18 条测试，0 跳过），已按 常 的两轮反馈修正：默认不评分（`quality_score` 留 NULL，`--score-mode contract-d` 才现算）、代偿计数按提示代号去重、零完成动作的组照样落库、`capture_quality` 分母改成整组时间跨度、未知 `summary.status` 按 `aborted` 处理并支持 `--strict` · 待 常/陈 确认动作代号与评分口径（见 `docs/decisions/0002`）· 更新日期：2026-09-19
+- [ ] 训练记录离线导入（`database/import_results.py` + schema 迁移列 + `session_events` 逐条提示事件 + `SEATED_KNEE_EXTENSION` 动作 + 4 版 `v0.6-proto` 与 4 版 `v0.7-proto` 规则）— 负责人：数据库（得） · 脚本与测试已跑通（24 条测试，0 跳过），已按 常 的两轮反馈修正：默认不评分（`quality_score` 留 NULL，`--score-mode contract-d` 才现算）、代偿计数按提示代号去重、零完成动作的组照样落库、`capture_quality` 分母改成整组时间跨度、未知 `summary.status` 按 `aborted` 处理并支持 `--strict` · 20260921 已 rebase 到 PR #17 之后的 main 并适配：有 `summary.contract_reps` 时优先用原型自己的契约折算填 `reps`，按新 `config/knee_extension.json` 补 `v0.7-proto`（旧版保留），与 `backend/migrations/` 六张增量表共存已验证 · 待 常/陈 确认动作代号与评分口径（见 `docs/decisions/0002`）· 更新日期：2026-09-21
 
 ### backend/ 与 algorithm/（后端与视觉算法，负责人：常）
 
