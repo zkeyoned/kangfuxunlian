@@ -81,8 +81,26 @@ if [ -f frontend/app.js ]; then
   fi
 fi
 
+# 2.3 给前端脚本打版本戳，避免浏览器拿旧缓存
+#
+# index.html 引用的是固定的 app.js，浏览器会把它缓存下来；更新部署后访客可能
+# 仍在跑上一版脚本，表现为新功能"没生效"而又不报错，很难排查。
+# 这里只改部署出来的副本，仓库源码保持干净。
+STAMP=$(date +%Y%m%d%H%M%S)
+if [ -f frontend/index.html ]; then
+  sed -i "s#src=\"app.js\"#src=\"app.js?v=$STAMP\"#g" frontend/index.html
+  sed -i "s#href=\"styles.css\"#href=\"styles.css?v=$STAMP\"#g" frontend/index.html
+fi
+# worker 是 app.js 用 new Worker() 起的，同样要带版本，否则改了识别逻辑也不生效。
+if [ -f frontend/app.js ]; then
+  sed -i "s#new Worker(\"pose-worker.js\")#new Worker(\"pose-worker.js?v=$STAMP\")#g" frontend/app.js
+fi
+
 [ -d .venv ] || "$PY" -m venv .venv
 .venv/bin/pip install -q -i https://mirrors.aliyun.com/pypi/simple/ -r requirements.txt
+# 规则服务额外需要 numpy（rehab_pose 的人物跟踪模块用到）。
+# 不装 opencv / mediapipe / onnxruntime：浏览器模式下服务端不解码画面、不加载模型。
+.venv/bin/pip install -q -i https://mirrors.aliyun.com/pypi/simple/ numpy
 chown -R rehab:rehab "$APP_DIR" "$DATA_DIR"
 
 # 3. systemd（只监听本机 127.0.0.1:8801，外面只能经隧道进来）
@@ -105,7 +123,39 @@ PrivateTmp=true
 [Install]
 WantedBy=multi-user.target
 EOF
+# 4. 规则服务（浏览器模式下由它跑动作判定，不加载任何模型）
+#
+# 浏览器把画面变成 33 个关键点后发到这里，判定、计次、评分仍由 rehab_pose 完成。
+# 只监听 127.0.0.1，外面经 cloudflared 进来；鉴权复用业务后端的登录令牌。
+if [ -f "$APP_DIR/algorithm/rehab-pose-demo/live_api.py" ]; then
+  install -m 644 "$APP_DIR/deploy/rehab-vision.service" /etc/systemd/system/rehab-vision.service
+  VISION_UNIT=1
+else
+  echo "警告：未找到 live_api.py，跳过规则服务安装" >&2
+  VISION_UNIT=0
+fi
+
 systemctl daemon-reload
-systemctl enable --now rehabtrack
-sleep 2
+# 必须 restart 而不是 enable --now：后者对已经在运行的服务不做任何事，
+# 结果是代码文件更新了、进程还跑着上一版，表现为"部署了但没生效"。
+systemctl enable rehabtrack >/dev/null 2>&1
+systemctl restart rehabtrack
+if [ "$VISION_UNIT" = "1" ]; then
+  systemctl enable rehab-vision >/dev/null 2>&1
+  systemctl restart rehab-vision
+fi
+sleep 3
 curl -s http://127.0.0.1:8801/healthz && echo && echo "后端已在 127.0.0.1:8801 运行"
+if [ "$VISION_UNIT" = "1" ]; then
+  curl -s http://127.0.0.1:8803/healthz && echo && echo "规则服务已在 127.0.0.1:8803 运行"
+fi
+
+# 5. 浏览器端识别资源自检
+#
+# 这批文件按 .gitignore 不入库，靠 deploy/prepare-vendor.sh 在本地准备后随 frontend/ 同步上来。
+# 缺了的话公网访问者点开始训练会一直停在"正在准备识别模型"，所以这里明确提示而不是静默放过。
+if [ ! -f "$APP_DIR/frontend/vendor/mediapipe/vision_bundle.js" ] || \
+   [ ! -f "$APP_DIR/frontend/vendor/mediapipe/pose_landmarker_full.task" ]; then
+  echo "警告：frontend/vendor/mediapipe/ 资源缺失，浏览器端识别将无法使用。" >&2
+  echo "      请在本地执行 bash deploy/prepare-vendor.sh 后重新部署。" >&2
+fi

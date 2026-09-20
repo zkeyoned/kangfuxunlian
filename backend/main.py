@@ -12,6 +12,7 @@ import io
 import json
 import logging
 import logging.handlers
+import mimetypes
 import os
 import re
 import sqlite3
@@ -776,6 +777,12 @@ async def http_exc(request: Request, exc: HTTPException):
 # frontend/ 目录里如果还没有可运行的页面（只有 AGENTS.md / README.md），
 # 就不挂载静态目录，根路径改为返回一段指向 /docs 的提示 JSON，保证服务照常启动。
 _frontend_has_pages = FRONTEND.exists() and any(FRONTEND.glob("*.html"))
+# 浏览器端识别的静态资源要带正确的 Content-Type：
+# .wasm 若不是 application/wasm，WebAssembly.instantiateStreaming 会告警并退化成慢路径；
+# .task 是模型文件，任何 Python 版本的 mimetypes 都认不出，默认会被当成 text/plain。
+mimetypes.add_type("application/wasm", ".wasm")
+mimetypes.add_type("application/octet-stream", ".task")
+
 if _frontend_has_pages:
     app.mount("/", StaticFiles(directory=str(FRONTEND), html=True), name="frontend")
 else:
