@@ -151,7 +151,8 @@ class RTMPoseModel:
             if self.roi_mode=="locked":
                 from .subject import appearance
                 boxes=[] if boxes is None else boxes
-                idx,status=self.subject.update(boxes,[appearance(bgr,b) for b in boxes])
+                extract_appearance=getattr(self,'appearance_extractor',appearance)
+                idx,status=self.subject.update(boxes,[extract_appearance(bgr,b) for b in boxes],timestamp_s)
                 if idx is None:return [],status
                 boxes=[boxes[idx]]
             else:

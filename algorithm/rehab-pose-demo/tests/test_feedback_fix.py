@@ -17,11 +17,12 @@ class FeedbackFixTests(unittest.TestCase):
         for i in range(26,38):events+=m.update(i*.05,observed(trunk=-25),640,480,'rest')['feedback_events']
         self.assertEqual([e['code'] for e in events],['TRUNK_FORWARD','TRUNK_BACKWARD'])
 
-    def test_short_fast_motion_detected(self):
+    def test_instantaneous_speed_is_measured_but_not_used_as_action1_failure(self):
         m=self.ready();events=[]
         for i in range(1,7):
             events+=m.update(.7+i*.04,observed(90+i*12),640,480,'rest')['feedback_events']
-        self.assertIn('KNEE_TOO_FAST',[e['code'] for e in events])
+        self.assertEqual(events,[])
+        self.assertGreater(abs(m.update(1.0,observed(170),640,480,'rest')['measurement_metrics']['knee_velocity_deg_s']),0)
 
     def test_slow_motion_not_automatically_wrong(self):
         m=self.ready();events=[]

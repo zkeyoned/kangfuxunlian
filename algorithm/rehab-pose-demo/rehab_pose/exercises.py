@@ -19,6 +19,11 @@ class ExerciseAnalyzer:
         if exercise=='8':params.update(target_deg=165,min_hold_s=0,min_return_s=1)
         params.update(profile or {})
         if exercise=='2':params['target_deg']=90+self.rules.slr_target_min_deg
+        if exercise!='1':
+            # The v0.1 seated-extension timing rules do not change the three
+            # experimental exercise state machines.
+            params.update(rest_min_deg=0,start_dwell_s=0,target_dwell_s=0,
+                          reversal_dwell_s=0,attempt_timeout_s=0)
         self.engine=Analyzer(Config(**params));self.baseline=None
         self.original_rest=params['rest_max_deg'];self.original_start=params['start_deg']
 
@@ -40,9 +45,10 @@ class ExerciseAnalyzer:
             if self.exercise=='1' and base.get('captured_at_s')!=self.baseline:
                 b=base['knee_included_deg'];c=self.engine.config
                 self.engine.abort(t,'new_reference')
-                if b+12<c.target_deg-c.hysteresis_deg:
-                    c.rest_max_deg=max(self.original_rest,b+6)
-                    c.start_deg=max(self.original_start,b+12)
+                if b+10<c.target_deg-c.hysteresis_deg:
+                    c.rest_min_deg=max(0,b-10)
+                    c.rest_max_deg=b+10
+                    c.start_deg=b+10
                 else:
                     state=self.engine.update(t,None,False)
                     state.update(phase_signal_deg=None,exercise=self.name,motion_amount_deg=None,
@@ -81,5 +87,13 @@ class ExerciseAnalyzer:
                 r['min_motion_delta_deg']=r.pop('min_included_deg')-90
                 r['phase_signal_offset_deg']=90
             r['movement_to_first_peak_s']=r.pop('extension_to_first_peak_s')
-            if self.exercise=='1':r['extension_to_first_peak_s']=r['movement_to_first_peak_s']
+            if self.exercise=='1':
+                r['extension_to_first_peak_s']=r['movement_to_first_peak_s']
+                r['knee_start_deg']=self.engine.config.rest_max_deg-10
+                r['knee_peak_deg']=r['max_included_deg']
+                r['knee_excursion_deg']=r['knee_peak_deg']-r['knee_start_deg']
+                r['target_knee_included_deg']=self.engine.config.target_deg
+                r['target_reached']=r['target_comparison']['amplitude_met']
+                r['target_completed']=bool(r['target_comparison']['amplitude_met'] and
+                                           r['target_comparison']['hold_met'])
         return state

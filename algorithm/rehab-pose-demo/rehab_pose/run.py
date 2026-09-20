@@ -189,7 +189,7 @@ def analyze(source,output,side="left",config_path=None,model_path=None,preview=F
     session=TrainingSession(training_plan) if training_plan else None
     if session:
         expected=training_plan.hold_s
-        if exercise=='1' and not 2<=expected<=3:raise ValueError('动作1保持时间应为2～3秒')
+        if exercise=='1' and expected not in (2,2.5,3,5):raise ValueError('动作1当前支持保持2、2.5、3或5秒，标准默认3秒')
         if exercise=='2' and expected!=5:raise ValueError('动作2当前保持5秒')
         if exercise in ('6','8') and expected!=0:raise ValueError('动作6/8不设置顶点保持')
         analyzer.engine.config.min_hold_s=expected
@@ -309,16 +309,18 @@ def analyze(source,output,side="left",config_path=None,model_path=None,preview=F
                 if len(analyzer.reps)>before_reps:
                     rep=analyzer.reps[-1];rep['target_generation']=target_generation
                     if session:session.record_rep(t,rep)
-                    for key,code,message in [('amplitude_met','AMPLITUDE_BELOW_TARGET','本次幅度未达到设置目标'),
+                    for key,code,message in [('amplitude_met','AMPLITUDE_BELOW_TARGET','本次尚未伸到目标角度，请在舒适范围内缓慢伸直'),
                                              ('hold_met','HOLD_TOO_SHORT','本次连续保持时间不足'),
-                                             ('return_time_met','RETURN_TOO_FAST','本次返回用时短于设置目标')]:
+                                             ('extension_time_met','EXTENSION_TOO_FAST','本次伸出过快，请缓慢伸膝'),
+                                             ('return_time_met','RETURN_TOO_FAST','本次放回过快，请缓慢放下')]:
                         if rep['target_comparison'][key] is False:
                             measure['feedback_events'].append(dict(code=code,message=message,level='notice',timestamp_s=t,rep_index=rep['index']))
+                            break
                 for event in measure['feedback_events']:
                     feedback_history.append(event);shown_feedback[event['code']]=t+2.
                 if not m['visible']:shown_feedback.clear()
                 measure['display_feedback']=[code for code,end in shown_feedback.items() if end>=t]
-                record={"schema_version":"1.3","algorithm_version":__version__,"backend":backend,
+                record={"schema_version":"1.4","algorithm_version":__version__,"backend":backend,
                         "rtm_roi":rtm_roi if backend=="rtmpose" else None,
                         "side":side,"subject":subject,
                         'leg_confirmation':{'confirmed':leg.confirmed,'model_side':leg.side,'generation':leg.generation,'required':leg.required},
@@ -404,7 +406,7 @@ def analyze(source,output,side="left",config_path=None,model_path=None,preview=F
                 model.close()
             if preview:
                 cv2.destroyAllWindows()
-            summary={"schema_version":"1.3","algorithm_version":__version__,"backend":backend,
+            summary={"schema_version":"1.4","algorithm_version":__version__,"backend":backend,
                      "rtm_roi":rtm_roi if backend=="rtmpose" else None,
                      "created_utc":datetime.now(timezone.utc).isoformat(),
                      "exercise":NAMES[exercise],"experimental_exercise":exercise!='1',"side":side,"facing":facing,"status":status,"error":error,
@@ -423,12 +425,17 @@ def analyze(source,output,side="left",config_path=None,model_path=None,preview=F
                      "frames":count,"reliable_frames":reliable_count,
                      "prediction_only_frames":prediction_count,
                      "reps_needing_review":sum(bool(r.get("needs_review")) for r in analyzer.reps),
-                     "completed_reps":len(analyzer.reps),"repetitions":analyzer.reps,
+                      "completed_reps":len(analyzer.reps),
+                      "target_completed_reps":sum(bool(r.get('target_completed')) for r in analyzer.reps),
+                      "action_standard_version":"seated-knee-extension-v0.1" if exercise=='1' else None,
+                      "repetitions":analyzer.reps,
                      "interrupted_attempts":analyzer.interrupted,"raw_video_copied":False}
             summary['unannotated_video_saved']=source_writer is not None
             summary['unannotated_video_note']='source.mp4 is encoded camera/input frames before overlays, not lossless sensor data'
             summary['exercise_rules']=asdict(rules_config)
             summary['unsupported_checks']=UNSUPPORTED.get(exercise,['肌肉发力'])
+            from .contract import rep_to_contract
+            summary['contract_reps']=[rep_to_contract(r,feedback_history) for r in analyzer.reps]
             if session:
                 session.finish(session.last_t or 0,status)
                 summary['training_session']=session.result(session.last_t or 0)
@@ -478,7 +485,7 @@ def main():
         parser.error("Camera requires --preview or --max-seconds to allow stopping")
     output=args.output or ROOT/"results"/datetime.now().strftime("%Y%m%d_%H%M%S_%f")
     from .session import TrainingPlan
-    hold=args.hold_seconds if args.hold_seconds is not None else {'1':2.,'2':5.,'6':0.,'8':0.}[args.exercise]
+    hold=args.hold_seconds if args.hold_seconds is not None else {'1':3.,'2':5.,'6':0.,'8':0.}[args.exercise]
     try:plan=TrainingPlan(args.sets,args.reps_per_set,hold) if args.sets is not None else None
     except ValueError as exc:parser.error(str(exc))
     analyze(args.camera if args.camera is not None else args.video,output,args.side,args.config,args.model,
