@@ -13,7 +13,9 @@
     {"code": "SLR",       "name": "直腿抬高", "joint": "髋/膝", "metric": "hip_angle",  "direction": "up",   "camera_side": "side",  "description": "仰卧，患侧膝伸直抬腿至目标角度，停留后缓慢放下。关键指标：髋屈曲角、膝伸直度。"},
     {"code": "KNEE_FLEX", "name": "屈膝训练", "joint": "膝",    "metric": "knee_angle", "direction": "down", "camera_side": "side",  "description": "坐位或俯卧，患侧膝屈曲至最大可耐受角度再伸直。关键指标：膝屈曲峰值。"},
     {"code": "SQUAT",     "name": "深蹲",     "joint": "膝/髋", "metric": "knee_angle", "direction": "down", "camera_side": "side",  "description": "双脚与肩同宽下蹲至目标深度后站起。关键指标：膝角、髋角、躯干前倾。"},
-    {"code": "STS",       "name": "坐站训练", "joint": "膝/髋", "metric": "knee_angle", "direction": "up",   "camera_side": "side",  "description": "从椅子上不借助手臂站起再坐下。关键指标：膝伸展、完成时间。"}
+    {"code": "STS",       "name": "坐站训练", "joint": "膝/髋", "metric": "knee_angle", "direction": "up",   "camera_side": "side",  "description": "从椅子上不借助手臂站起再坐下。关键指标：膝伸展、完成时间。"},
+    {"code": "SEATED_KNEE_EXTENSION", "name": "坐姿伸膝", "joint": "膝", "metric": "knee_angle", "direction": "up", "camera_side": "side",
+     "description": "20260919 新增，对应姿态识别原型 v0.6 的动作 1（唯一非实验性、测试覆盖最全的动作）。坐位，患侧膝关节从屈曲状态伸展至目标角度，停留后放下。关键指标：同侧髋-膝-踝夹角（0-180度，越接近180度越伸直），和 KNEE_FLEX 方向相反，不是同一个动作。"}
   ],
   "rule_versions": [
     {"exercise_code": "SQUAT", "version": "v0.1", "active": true,
@@ -55,6 +57,198 @@
        "rest_angle": 90, "start_threshold": 105, "target_angle": 170, "min_valid_angle": 160,
        "hold_ms": 300, "min_rep_ms": 1000, "max_rep_ms": 8000,
        "arm_assist_check": true, "smoothing_window": 5, "min_visibility": 0.6,
+       "score_weights": {"completion": 0.30, "amplitude": 0.25, "posture": 0.25, "tempo": 0.10, "stability": 0.10}
+     }},
+    {"exercise_code": "SEATED_KNEE_EXTENSION", "version": "v0.6-proto", "active": false,
+     "author": "数据库（得）", "reviewer": null,
+     "rationale": "20260919：不是新拟定的阈值，是把姿态识别原型 v0.6 的 config/knee_extension.json 里动作 1（SEATED_KNEE_EXTENSION）实际生效的参数原样转抄进来，供离线导入训练记录用。这套状态机设计（回滞角 hysteresis_deg + 反转角 reversal_deg + 最小活动幅度 min_excursion_deg）和 v0.1 那套（起动阈值 start_threshold + 保持毫秒数 hold_ms）不是同一代码路径，不能互相覆盖，两版并存。score_weights 不是原型产出的，是照抄 v0.1 的初始假设权重，因为评分公式（docs/03-接口契约.md D 节）要用。未经 常/陈 确认前 is_active 保持 false，不影响现有 plan_items 的默认参数。",
+     "params": {
+       "source": "algorithm/rehab-pose-demo/config/knee_extension.json（原型 v0.6，未经临床确认，仅技术测试参数）",
+       "prototype_code": "1", "prototype_name": "SEATED_KNEE_EXTENSION",
+       "base_parameters": {
+         "rest_max_deg": 105, "start_deg": 115, "target_deg": 160, "hysteresis_deg": 5,
+         "min_excursion_deg": 20, "reversal_deg": 8, "min_hold_s": 2, "min_return_s": 1,
+         "rest_dwell_s": 0.25, "max_gap_s": 0.3, "smoothing_tau_s": 0.08, "min_confidence": 0.6
+       },
+       "profile_override": {},
+       "measurement": {
+         "calibration_s": 2.0, "stable_angle_span_deg": 6.0, "stable_position_diagonal": 0.04,
+         "velocity_window_s": 0.2, "max_sample_gap_s": 0.3, "invalidate_after_s": 2.0,
+         "feedback_dwell_s": 0.3, "feedback_cooldown_s": 3.0,
+         "trunk_delta_limit_deg": 15.0, "thigh_delta_limit_deg": 15.0, "speed_limit_deg_s": 180.0
+       },
+       "score_weights": {"completion": 0.30, "amplitude": 0.25, "posture": 0.25, "tempo": 0.10, "stability": 0.10}
+     }},
+    {"exercise_code": "SLR", "version": "v0.6-proto", "active": false,
+     "author": "数据库（得）", "reviewer": null,
+     "rationale": "20260919：原样转抄 config/knee_extension.json 动作 2（SUPINE_STRAIGHT_LEG_RAISE）。这个动作的主指标不是绝对髋屈曲角，是相对初始大腿方向的变化量（已扣掉 90 度人工偏移，见 rehab_pose/exercises.py），和 v0.1 假设的量纲不同，落库时按相对量原样存，不折算。target_deg 在原型运行时还会被 90+exercise_rules.slr_target_min_deg 二次覆盖（这里的 profile_override 已经和二次覆盖结果一致），不在种子数据里预先计算合并值，真实的每次运行合并结果由 database/import_results.py 从当次 summary.json 的 effective_parameters 直接读取。score_weights 照抄 v0.1 初始假设权重。is_active=false，待 常/陈 确认动作代号与阈值口径后再决定是否启用，不覆盖现有 v0.1。",
+     "params": {
+       "source": "algorithm/rehab-pose-demo/config/knee_extension.json（原型 v0.6，未经临床确认，仅技术测试参数）",
+       "prototype_code": "2", "prototype_name": "SUPINE_STRAIGHT_LEG_RAISE",
+       "base_parameters": {
+         "rest_max_deg": 105, "start_deg": 115, "target_deg": 160, "hysteresis_deg": 5,
+         "min_excursion_deg": 20, "reversal_deg": 8, "min_hold_s": 2, "min_return_s": 1,
+         "rest_dwell_s": 0.25, "max_gap_s": 0.3, "smoothing_tau_s": 0.08, "min_confidence": 0.6
+       },
+       "profile_override": {
+         "rest_max_deg": 95, "start_deg": 100, "target_deg": 120, "min_excursion_deg": 10,
+         "reversal_deg": 5, "min_hold_s": 5, "min_return_s": 1
+       },
+       "exercise_rules": {
+         "slr_min_knee_deg": 170, "slr_target_min_deg": 30, "slr_target_max_deg": 45,
+         "slr_speed_limit_deg_s": 90, "slr_trunk_delta_limit_deg": 15,
+         "dwell_s": 0.3, "speed_dwell_s": 0.08, "cooldown_s": 3
+       },
+       "score_weights": {"completion": 0.30, "amplitude": 0.25, "posture": 0.25, "tempo": 0.10, "stability": 0.10}
+     }},
+    {"exercise_code": "SQUAT", "version": "v0.6-proto", "active": false,
+     "author": "数据库（得）", "reviewer": null,
+     "rationale": "20260919：原样转抄 config/knee_extension.json 动作 6（SUPPORTED_MINI_SQUAT，扶物微蹲）。注意这是浅蹲（min_excursion_deg=10，需要支撑），和 v0.1 假设的无支撑深蹲（target_angle 到 90 度膝角）深度定义可能不是同一个动作，需要 常/陈 确认这俩到底是不是同一训练动作，本条只是原样转抄原型参数，不代表这个判断。主指标同样是相对初始方向的变化量（已扣偏移），不是解剖角，按原样存。score_weights 照抄 v0.1 初始假设权重。is_active=false。",
+     "params": {
+       "source": "algorithm/rehab-pose-demo/config/knee_extension.json（原型 v0.6，未经临床确认，仅技术测试参数）",
+       "prototype_code": "6", "prototype_name": "SUPPORTED_MINI_SQUAT",
+       "base_parameters": {
+         "rest_max_deg": 105, "start_deg": 115, "target_deg": 160, "hysteresis_deg": 5,
+         "min_excursion_deg": 20, "reversal_deg": 8, "min_hold_s": 2, "min_return_s": 1,
+         "rest_dwell_s": 0.25, "max_gap_s": 0.3, "smoothing_tau_s": 0.08, "min_confidence": 0.6
+       },
+       "profile_override": {
+         "rest_max_deg": 95, "start_deg": 100, "target_deg": 120, "min_excursion_deg": 10,
+         "reversal_deg": 5, "min_hold_s": 0, "min_return_s": 1
+       },
+       "exercise_rules": {
+         "squat_max_flexion_deg": 90, "squat_forward_limit_deg": 15, "knee_speed_limit_deg_s": 180,
+         "dwell_s": 0.3, "speed_dwell_s": 0.08, "cooldown_s": 3
+       },
+       "score_weights": {"completion": 0.30, "amplitude": 0.25, "posture": 0.25, "tempo": 0.10, "stability": 0.10}
+     }},
+    {"exercise_code": "STS", "version": "v0.6-proto", "active": false,
+     "author": "数据库（得）", "reviewer": null,
+     "rationale": "20260919：原样转抄 config/knee_extension.json 动作 8（SIT_TO_STAND）。这一对是四个里名字和主指标都对得上的（真实膝夹角，180度=站直），但阈值仍是原型技术测试参数，不是临床值。score_weights 照抄 v0.1 初始假设权重。is_active=false，待 常/陈 确认后再决定是否替换 v0.1。",
+     "params": {
+       "source": "algorithm/rehab-pose-demo/config/knee_extension.json（原型 v0.6，未经临床确认，仅技术测试参数）",
+       "prototype_code": "8", "prototype_name": "SIT_TO_STAND",
+       "base_parameters": {
+         "rest_max_deg": 105, "start_deg": 115, "target_deg": 160, "hysteresis_deg": 5,
+         "min_excursion_deg": 20, "reversal_deg": 8, "min_hold_s": 2, "min_return_s": 1,
+         "rest_dwell_s": 0.25, "max_gap_s": 0.3, "smoothing_tau_s": 0.08, "min_confidence": 0.6
+       },
+       "profile_override": {"target_deg": 165, "min_hold_s": 0, "min_return_s": 1},
+       "exercise_rules": {
+         "standing_knee_min_deg": 165, "standing_trunk_limit_deg": 15, "standing_hip_flexion_max_deg": 20,
+         "knee_speed_limit_deg_s": 180, "dwell_s": 0.3, "speed_dwell_s": 0.08, "cooldown_s": 3
+       },
+       "score_weights": {"completion": 0.30, "amplitude": 0.25, "posture": 0.25, "tempo": 0.10, "stability": 0.10}
+     }},
+    {"exercise_code": "SEATED_KNEE_EXTENSION", "version": "v0.7-proto", "active": false,
+     "author": "数据库（得）", "reviewer": null,
+     "rationale": "20260921：main 合并 PR #17 之后 config/knee_extension.json 改了三段（parameters、measurement、backend_parameters），v0.6-proto 转抄的数值已经不是原型现在实际生效的参数，所以按老规矩再抄一版，v0.6-proto 原样保留（老结果目录导入时仍对应那一版）。动作 1 这次的改动：目标角 160 改 170 度、顶点保持 2 改 3 秒（run.py 里动作 1 默认保持也从 2 改成 3 秒，且只接受 2 / 2.5 / 3 / 5 秒）、反转角 8 改 5 度、静息驻留 0.25 改 0.5 秒、min_confidence 0.6 改 0.7，并新增 rest_min_deg / start_dwell_s / target_dwell_s / reversal_dwell_s / attempt_timeout_s 五个键；measurement 段提示驻留 0.3 改 0.5 秒、冷却 3 改 5 秒、thigh_delta_limit_deg 15 改 10。键名和数值一律原样转抄，不做换算、不预先合并二次覆盖。score_weights 仍是照抄 v0.1 的初始假设权重，不是原型产出。is_active=false，未经 常/陈 确认前不影响 plan_items 默认使用的 v0.1。",
+     "params": {
+       "source": "algorithm/rehab-pose-demo/config/knee_extension.json（原型 PR #17 之后的版本，未经临床确认，仅技术测试参数）",
+       "prototype_code": "1", "prototype_name": "SEATED_KNEE_EXTENSION",
+       "backend_parameters": {"mediapipe": {"min_confidence": 0.7}, "rtmpose": {"min_confidence": 0.3}},
+       "base_parameters": {
+         "rest_max_deg": 105, "start_deg": 115, "target_deg": 170, "hysteresis_deg": 5,
+         "min_excursion_deg": 20, "reversal_deg": 5, "min_hold_s": 3, "min_return_s": 1,
+         "rest_dwell_s": 0.5, "max_gap_s": 0.3, "smoothing_tau_s": 0.08, "min_confidence": 0.7,
+         "rest_min_deg": 0, "start_dwell_s": 0.2, "target_dwell_s": 0.2, "reversal_dwell_s": 0.2,
+         "attempt_timeout_s": 30
+       },
+       "profile_override": {},
+       "measurement": {
+         "calibration_s": 2.0, "stable_angle_span_deg": 6.0, "stable_position_diagonal": 0.04,
+         "velocity_window_s": 0.2, "max_sample_gap_s": 0.3, "invalidate_after_s": 2.0,
+         "feedback_dwell_s": 0.5, "feedback_cooldown_s": 5.0,
+         "trunk_delta_limit_deg": 15.0, "thigh_delta_limit_deg": 10.0, "speed_limit_deg_s": 180.0
+       },
+       "score_weights": {"completion": 0.30, "amplitude": 0.25, "posture": 0.25, "tempo": 0.10, "stability": 0.10}
+     }},
+    {"exercise_code": "SLR", "version": "v0.7-proto", "active": false,
+     "author": "数据库（得）", "reviewer": null,
+     "rationale": "20260921：跟着 PR #17 后的 config/knee_extension.json 再抄一版，v0.6-proto 保留。动作 2 自己的 exercise_profiles 和 exercise_rules 这次没改，变的是它继承的 base_parameters 与 measurement 两段（详见本组 SEATED_KNEE_EXTENSION v0.7-proto 的说明），所以这一版的差异集中在 hysteresis_deg 以外的基础参数和提示驻留、冷却、thigh_delta_limit_deg 上。主指标仍是相对初始大腿方向的变化量（已扣掉 90 度人工偏移，见 rehab_pose/exercises.py），落库按相对量原样存，不折算；target_deg 运行时仍会被 90+slr_target_min_deg 二次覆盖，这里不预先计算合并值，真实合并结果由 database/import_results.py 从当次 summary.json 的 effective_parameters 读取。score_weights 照抄 v0.1 初始假设权重。is_active=false。",
+     "params": {
+       "source": "algorithm/rehab-pose-demo/config/knee_extension.json（原型 PR #17 之后的版本，未经临床确认，仅技术测试参数）",
+       "prototype_code": "2", "prototype_name": "SUPINE_STRAIGHT_LEG_RAISE",
+       "backend_parameters": {"mediapipe": {"min_confidence": 0.7}, "rtmpose": {"min_confidence": 0.3}},
+       "base_parameters": {
+         "rest_max_deg": 105, "start_deg": 115, "target_deg": 170, "hysteresis_deg": 5,
+         "min_excursion_deg": 20, "reversal_deg": 5, "min_hold_s": 3, "min_return_s": 1,
+         "rest_dwell_s": 0.5, "max_gap_s": 0.3, "smoothing_tau_s": 0.08, "min_confidence": 0.7,
+         "rest_min_deg": 0, "start_dwell_s": 0.2, "target_dwell_s": 0.2, "reversal_dwell_s": 0.2,
+         "attempt_timeout_s": 30
+       },
+       "profile_override": {
+         "rest_max_deg": 95, "start_deg": 100, "target_deg": 120, "min_excursion_deg": 10,
+         "reversal_deg": 5, "min_hold_s": 5, "min_return_s": 1
+       },
+       "exercise_rules": {
+         "slr_min_knee_deg": 170, "slr_target_min_deg": 30, "slr_target_max_deg": 45,
+         "slr_speed_limit_deg_s": 90, "slr_trunk_delta_limit_deg": 15,
+         "dwell_s": 0.3, "speed_dwell_s": 0.08, "cooldown_s": 3
+       },
+       "measurement": {
+         "calibration_s": 2.0, "stable_angle_span_deg": 6.0, "stable_position_diagonal": 0.04,
+         "velocity_window_s": 0.2, "max_sample_gap_s": 0.3, "invalidate_after_s": 2.0,
+         "feedback_dwell_s": 0.5, "feedback_cooldown_s": 5.0,
+         "trunk_delta_limit_deg": 15.0, "thigh_delta_limit_deg": 10.0, "speed_limit_deg_s": 180.0
+       },
+       "score_weights": {"completion": 0.30, "amplitude": 0.25, "posture": 0.25, "tempo": 0.10, "stability": 0.10}
+     }},
+    {"exercise_code": "SQUAT", "version": "v0.7-proto", "active": false,
+     "author": "数据库（得）", "reviewer": null,
+     "rationale": "20260921：跟着 PR #17 后的 config/knee_extension.json 再抄一版，v0.6-proto 保留。动作 6 自己的 exercise_profiles 和 exercise_rules 这次没改，变的是它继承的 base_parameters 与 measurement 两段。这仍是扶物微蹲（浅蹲，min_excursion_deg=10，需要支撑），和 v0.1 假设的无支撑深蹲是不是同一个训练动作，仍待 常/陈 确认，本条只是原样转抄原型参数，不代表这个判断。主指标同样是相对初始方向的变化量（已扣偏移），不是解剖角，按原样存。score_weights 照抄 v0.1 初始假设权重。is_active=false。",
+     "params": {
+       "source": "algorithm/rehab-pose-demo/config/knee_extension.json（原型 PR #17 之后的版本，未经临床确认，仅技术测试参数）",
+       "prototype_code": "6", "prototype_name": "SUPPORTED_MINI_SQUAT",
+       "backend_parameters": {"mediapipe": {"min_confidence": 0.7}, "rtmpose": {"min_confidence": 0.3}},
+       "base_parameters": {
+         "rest_max_deg": 105, "start_deg": 115, "target_deg": 170, "hysteresis_deg": 5,
+         "min_excursion_deg": 20, "reversal_deg": 5, "min_hold_s": 3, "min_return_s": 1,
+         "rest_dwell_s": 0.5, "max_gap_s": 0.3, "smoothing_tau_s": 0.08, "min_confidence": 0.7,
+         "rest_min_deg": 0, "start_dwell_s": 0.2, "target_dwell_s": 0.2, "reversal_dwell_s": 0.2,
+         "attempt_timeout_s": 30
+       },
+       "profile_override": {
+         "rest_max_deg": 95, "start_deg": 100, "target_deg": 120, "min_excursion_deg": 10,
+         "reversal_deg": 5, "min_hold_s": 0, "min_return_s": 1
+       },
+       "exercise_rules": {
+         "squat_max_flexion_deg": 90, "squat_forward_limit_deg": 15, "knee_speed_limit_deg_s": 180,
+         "dwell_s": 0.3, "speed_dwell_s": 0.08, "cooldown_s": 3
+       },
+       "measurement": {
+         "calibration_s": 2.0, "stable_angle_span_deg": 6.0, "stable_position_diagonal": 0.04,
+         "velocity_window_s": 0.2, "max_sample_gap_s": 0.3, "invalidate_after_s": 2.0,
+         "feedback_dwell_s": 0.5, "feedback_cooldown_s": 5.0,
+         "trunk_delta_limit_deg": 15.0, "thigh_delta_limit_deg": 10.0, "speed_limit_deg_s": 180.0
+       },
+       "score_weights": {"completion": 0.30, "amplitude": 0.25, "posture": 0.25, "tempo": 0.10, "stability": 0.10}
+     }},
+    {"exercise_code": "STS", "version": "v0.7-proto", "active": false,
+     "author": "数据库（得）", "reviewer": null,
+     "rationale": "20260921：跟着 PR #17 后的 config/knee_extension.json 再抄一版，v0.6-proto 保留。动作 8 自己的 exercise_profiles 和 exercise_rules 这次没改，变的是它继承的 base_parameters 与 measurement 两段。主指标是真实膝夹角（180 度=站直），阈值仍是原型技术测试参数，不是临床值。score_weights 照抄 v0.1 初始假设权重。is_active=false，待 常/陈 确认后再决定是否替换 v0.1。",
+     "params": {
+       "source": "algorithm/rehab-pose-demo/config/knee_extension.json（原型 PR #17 之后的版本，未经临床确认，仅技术测试参数）",
+       "prototype_code": "8", "prototype_name": "SIT_TO_STAND",
+       "backend_parameters": {"mediapipe": {"min_confidence": 0.7}, "rtmpose": {"min_confidence": 0.3}},
+       "base_parameters": {
+         "rest_max_deg": 105, "start_deg": 115, "target_deg": 170, "hysteresis_deg": 5,
+         "min_excursion_deg": 20, "reversal_deg": 5, "min_hold_s": 3, "min_return_s": 1,
+         "rest_dwell_s": 0.5, "max_gap_s": 0.3, "smoothing_tau_s": 0.08, "min_confidence": 0.7,
+         "rest_min_deg": 0, "start_dwell_s": 0.2, "target_dwell_s": 0.2, "reversal_dwell_s": 0.2,
+         "attempt_timeout_s": 30
+       },
+       "profile_override": {"target_deg": 165, "min_hold_s": 0, "min_return_s": 1},
+       "exercise_rules": {
+         "standing_knee_min_deg": 165, "standing_trunk_limit_deg": 15, "standing_hip_flexion_max_deg": 20,
+         "knee_speed_limit_deg_s": 180, "dwell_s": 0.3, "speed_dwell_s": 0.08, "cooldown_s": 3
+       },
+       "measurement": {
+         "calibration_s": 2.0, "stable_angle_span_deg": 6.0, "stable_position_diagonal": 0.04,
+         "velocity_window_s": 0.2, "max_sample_gap_s": 0.3, "invalidate_after_s": 2.0,
+         "feedback_dwell_s": 0.5, "feedback_cooldown_s": 5.0,
+         "trunk_delta_limit_deg": 15.0, "thigh_delta_limit_deg": 10.0, "speed_limit_deg_s": 180.0
+       },
        "score_weights": {"completion": 0.30, "amplitude": 0.25, "posture": 0.25, "tempo": 0.10, "stability": 0.10}
      }}
   ],

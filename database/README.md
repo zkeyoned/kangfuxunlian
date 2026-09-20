@@ -10,7 +10,7 @@
 
 真正跑起来产生的数据库文件在仓库根目录的 `data/` 下（`data/rehabtrack.sqlite3`），这个目录已被 `.gitignore` 排除，不进仓库。
 
-## 14 张表，分四组
+## 15 张表，分四组
 
 **账号与机构**
 - `institutions` 机构，逻辑隔离的最小单位
@@ -28,6 +28,7 @@
 - `sessions` 一次训练会话
 - `session_items` 一组动作的结果（前端上传的核心数据，见 `docs/03-接口契约.md` B 节）
 - `reps` 单次动作的明细（峰值角度、时长、是否有效、代偿标记）
+- `session_events` 逐条提示事件（20260919 新增，离线导入原型 `feedback_events` 用，见 `docs/02-数据字典.md`。这是逐时刻的纠错记录，不能用 `alerts` 代替，`alerts` 是给康复师看的汇总提醒）
 
 **运营**
 - `alerts` 异常提醒（疼痛过高、代偿过多、拍摄质量低、角度退步、连续未训练等触发）
@@ -49,6 +50,29 @@
 3. 如果新字段需要演示数据，改 `database/seed/seed.json`。
 4. 如果改动影响到接口返回或请求字段，同步 `docs/03-接口契约.md`，并在 `docs/decisions/` 新增一条决策记录，知会前端（景）和后端（常）。
 5. 跑 `python3 tests/test_api.py`，必须全过才能合并。
+
+## schema.sql 必须每次重跑都不报错，不能用 ALTER TABLE
+
+`backend/db.py` 的 `init_db()` 每次启动服务都会对 `data/rehabtrack.sqlite3` 重跑一遍整份
+`schema.sql`（`fresh` 只控制要不要灌 `seed.json`，不控制要不要跑 schema，见该文件第 65-72
+行；`database/` 不改 `backend/` 代码，这个行为按它现在的样子当约束条件用）。这意味着
+`schema.sql` 里只能出现 `CREATE TABLE IF NOT EXISTS`、`CREATE INDEX IF NOT EXISTS`、
+`CREATE UNIQUE INDEX IF NOT EXISTS` 这类天然幂等的语句，**不能出现 `ALTER TABLE ADD
+COLUMN`**：这条语句不支持 `IF NOT EXISTS`，已经加过一次列的库下次启动会因为列已存在报
+`duplicate column name` 直接崩掉。
+
+所以：给已有表新增列，直接把新列写进对应 `CREATE TABLE IF NOT EXISTS` 语句的**末尾**（不
+重排已有列，新建库跟着 `schema.sql` 走一遍就自动有这些列）；`data/rehabtrack.sqlite3` 已经存
+在、不想 `--reset` 重建的人，去 `database/migrations/` 下找对应日期的 `.sql` 文件手工执行一次
+（`sqlite3 data/rehabtrack.sqlite3 < database/migrations/20260919-import-prep.sql` 这样）。
+`database/migrations/` 只是给旧库补课用的，不是每次启动自动跑的东西，新建库不需要碰它。
+
+别和 `backend/migrations/` 搞混：那是后端（常）在 PR #17 里加的目录，`init_db()` 会在
+`schema.sql` 之后**自动**逐个执行里面的 `*.sql`（目前六张增量表：`care_requests`、
+`training_reports`、`report_videos`、`report_video_chunks`、`visual_prescriptions`、
+`patient_training_selection`）。那六张表归后端维护，`database/` 不改它们，只保证和
+`schema.sql` 的 15 张表不重名、同一个库连跑两次 `init_db()` 不报错。`database/migrations/`
+仍然是手工执行的，不会被 `init_db()` 自动跑。
 
 ## 与后端的读写约定
 

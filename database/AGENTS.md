@@ -32,6 +32,7 @@
 ## 完工标准
 
 - 改表结构必须同时改 docs/02-数据字典.md 和 database/seed/seed.json，保证三者字段一致。
+- schema.sql 只能写 `CREATE TABLE/INDEX IF NOT EXISTS`，不能写 `ALTER TABLE`：backend/db.py 的 init_db() 每次启动都会对已有库重跑一遍 schema.sql，ALTER TABLE ADD COLUMN 在已经跑过一次的库上会因为列已存在报错。给已有表加列，直接写进对应 CREATE TABLE 语句末尾；已有旧库要补列，在 database/migrations/ 下新增一个手工执行的 .sql 文件，见 database/README.md 对应小节。
 - 跑 `python3 tests/test_api.py` 全部通过。
 - backend/db.py 里 SCHEMA 常量指向 `ROOT/"database"/"schema.sql"`，SEED 常量指向 `ROOT/"database"/"seed"/"seed.json"`，改表结构后确认这两个路径仍然有效；backend/db.py 本身属于 backend/，路径若需变动，提 PR 请后端（常）审。
 - 更新 PROGRESS.md 里数据库这一行的状态与日期。
