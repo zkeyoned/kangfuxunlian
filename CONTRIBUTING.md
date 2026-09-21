@@ -95,3 +95,4 @@ git push --force-with-lease
 - 不许 `git push --force` 到 `main`，只能对自己的功能分支用 `--force-with-lease`。
 - 不许跳过 `git pull --rebase origin main` 直接开始改代码。
 - 不许在提交信息、代码注释、文档里写真实姓名、域名、服务器 IP、密钥密码，占位符写法（`<你的域名>`、`<服务器IP>`）见 `AGENTS.md`「提交规则」第 6 条。
+- **例外：`materials/` 下的参赛材料要写团队成员真实姓名、学校与专业**，那是大赛评审要看的内容。域名、IP、密钥的限制对参赛材料同样有效。
