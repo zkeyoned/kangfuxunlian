@@ -24,7 +24,7 @@ class ExerciseAnalyzer:
             # experimental exercise state machines.
             params.update(rest_min_deg=0,start_dwell_s=0,target_dwell_s=0,
                           reversal_dwell_s=0,attempt_timeout_s=0)
-        self.engine=Analyzer(Config(**params));self.baseline=None
+        self.engine=Analyzer(Config(**params), seated=exercise=="1");self.baseline=None
         self.original_rest=params['rest_max_deg'];self.original_start=params['start_deg']
 
     @property

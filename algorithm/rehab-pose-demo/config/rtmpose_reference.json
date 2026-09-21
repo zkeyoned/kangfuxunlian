@@ -12,9 +12,9 @@
     "rehab_pose/auto_facing.py": "2031a7f7a959c5d319cb480d890694d306c03084758d6662fd64ac0699557229",
     "rehab_pose/brief_report.py": "ec89e6157e3638cd6eb82e696920d3592ac0507aa3c2e670888f88fe11bf9572",
     "rehab_pose/contract.py": "88490805708de9acb2a1b6cead81b2375db779acf998f8d7f8693fc877cf05a7",
-    "rehab_pose/core.py": "46ad8e42c4e4600442a2c1c8cf4e164a35d898768ce2342f1e82fc7dba778bff",
+    "rehab_pose/core.py": "7a4003746534b2efb80697f55c0b14cfbe3431a51b8e8a63bab2583b166616ab",
     "rehab_pose/exercise_rules.py": "a889346bff1c166f247e6f17962b77241f4526073f1c17a97dedd04a253f461b",
-    "rehab_pose/exercises.py": "a0fa1e6fc3a5438386f5d4c759198775d70aeddd36a1999e9c2314ca4e26b58e",
+    "rehab_pose/exercises.py": "8554950ff7034a944e55a82fb3ccabf904aa1ee4daedb4628c23b47adffe1a6b",
     "rehab_pose/leg_selection.py": "104b0e57659d205a87b667410df1fac49237fd9afb55f5a9820e0df4c0ce990a",
     "rehab_pose/measures.py": "92538490e168d682fe733130d723a26f410fdb887aa092fe63d3759b74531289",
     "rehab_pose/model.py": "80faaccc70a0f3c1218564eb8d48a56780ee92a7219274d5eb049bbc2700f69a",
@@ -39,5 +39,5 @@
     "roi_mode": "detected-then-locked",
     "confidence": 0.3
   },
-  "reference_id": "53ffe8b2dfac0c5770436521aec0d6d262a21fa46e98cc0aefa8e990e910bc2d"
+  "reference_id": "9021e54053d4348b872712f2899593d565f54242c503a92ca0cc5b50ed0dedbe"
 }

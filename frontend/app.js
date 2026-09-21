@@ -558,7 +558,7 @@ function updateLiveResult(result,options){
   if(metrics.children?.length===values.length){
     values.forEach((v,i)=>["span","b","small"].forEach((tag,j)=>{const node=metrics.children[i].querySelector(tag),text=String(v[j]);if(node.textContent!==text)node.textContent=text}));
   }else metrics.innerHTML=values.map(v=>`<div class="live-metric"><span>${v[0]}</span><b>${v[1]}</b><small>${v[2]}</small></div>`).join("");
-  (result.feedback_events||[]).forEach(event=>$("#cue-log").insertAdjacentHTML("afterbegin",`<li><time>${fmt(event.timestamp_s)}秒</time><p>${escapeHtml(event.message)}</p></li>`));
+  (result.feedback_events||[]).forEach(event=>$("#cue-log").insertAdjacentHTML("afterbegin",`<li><time>${fmt(event.timestamp_s)}秒</time><p>${event.rep_index?`第 ${event.rep_index} 次：`:""}${escapeHtml(event.message)}</p></li>`));
 }
 
 // ===== 浏览器端识别 =====
@@ -1250,7 +1250,7 @@ async function selectBrowserSubject(x,y){
 }
 
 // Remote RTMPose: same JPEG preprocessing and original server process, paired display.
-const RTM_REFERENCE="53ffe8b2dfac0c5770436521aec0d6d262a21fa46e98cc0aefa8e990e910bc2d";
+const RTM_REFERENCE="9021e54053d4348b872712f2899593d565f54242c503a92ca0cc5b50ed0dedbe";
 let remoteFrames=null,remoteCapturing=false,remoteTimer=null,remoteFrameSeq=0,remoteWatchdog=null;
 function startRemoteFrames(){
   remoteCapturing=true;const generation=cameraRequestGeneration,id=visionSessionId;
