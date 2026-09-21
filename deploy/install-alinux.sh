@@ -99,6 +99,33 @@ if [ -f frontend/app.js ]; then
   sed -i "s#new Worker(\"pose-worker.js\")#new Worker(\"pose-worker.js?v=$STAMP\")#g" frontend/app.js
 fi
 
+# 2.4 生产环境移除页面上的演示凭证
+#
+# index.html 里有一块「虚构演示账号」按钮，直接印着账号与初始密码，方便本机演示；
+# 但站点一旦公网可达，等于把可登录的凭证贴在首页上（其中包括管理员账号）。
+# 这里只改部署出来的副本，仓库源码保持原样，本机联调体验不变。
+"$PY" - <<'PYEOF'
+import re
+from pathlib import Path
+
+page = Path("frontend/index.html")
+if page.exists():
+    html = page.read_text(encoding="utf-8")
+    cleaned, n = re.subn(r'<div class="demo-accounts">.*?</div>', "", html, flags=re.S)
+    if n:
+        page.write_text(cleaned, encoding="utf-8")
+    print("  移除首页演示凭证块：%d 处" % n)
+
+# 一键填充按钮所带的明文密码同样清掉，避免填进去的是早已轮换过的旧密码
+app = Path("frontend/app.js")
+if app.exists():
+    src = app.read_text(encoding="utf-8")
+    cleaned, n = re.subn(r'(\{key:"[^"]+",name:"[^"]*",account:"[^"]*",)password:"[^"]*",', r"\1", src)
+    if n:
+        app.write_text(cleaned, encoding="utf-8")
+    print("  清除脚本内明文密码：%d 处" % n)
+PYEOF
+
 [ -d .venv ] || "$PY" -m venv .venv
 .venv/bin/pip install -q -i https://mirrors.aliyun.com/pypi/simple/ -r requirements.txt
 # 规则服务额外需要 numpy（rehab_pose 的人物跟踪模块用到）。
