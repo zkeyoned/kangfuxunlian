@@ -1,0 +1,43 @@
+{
+  "models": {
+    "detector.onnx": "ceb11c07298f95c50d7c5abeb906d03340c85f23aa79e3e66966e7fb6c307250",
+    "pose.onnx": "5c0a4bf67953e6d2ac43ce15e77dc9d5d354ae18430a47d2c5963a7bc5683e3c"
+  },
+  "source": {
+    "config/knee_extension.json": "04a63c46136c7a8a49262001586ce7cb0fbb431747d19d8cdb5d8abab01a2d99",
+    "plan_parameters.py": "a7afe2d6a22ba530df3c9ede908d1c9d8119b5d91627a0c2723cdc7a73f67933",
+    "rehab_pose/__init__.py": "3265ef0fdb75813b26109158be2d0d74da8efd41286d02d35965563091325cd5",
+    "rehab_pose/assessment.py": "5af7a5d52736ad087a358442e4492a80e1dec2985986f4286834e9c26fdbfe5f",
+    "rehab_pose/assessment_extended.py": "8478ffb10872bf51aecc92db5fadb25861bdebc8455181fef782de7537598e53",
+    "rehab_pose/auto_facing.py": "2031a7f7a959c5d319cb480d890694d306c03084758d6662fd64ac0699557229",
+    "rehab_pose/brief_report.py": "ec89e6157e3638cd6eb82e696920d3592ac0507aa3c2e670888f88fe11bf9572",
+    "rehab_pose/contract.py": "88490805708de9acb2a1b6cead81b2375db779acf998f8d7f8693fc877cf05a7",
+    "rehab_pose/core.py": "46ad8e42c4e4600442a2c1c8cf4e164a35d898768ce2342f1e82fc7dba778bff",
+    "rehab_pose/exercise_rules.py": "a889346bff1c166f247e6f17962b77241f4526073f1c17a97dedd04a253f461b",
+    "rehab_pose/exercises.py": "a0fa1e6fc3a5438386f5d4c759198775d70aeddd36a1999e9c2314ca4e26b58e",
+    "rehab_pose/leg_selection.py": "104b0e57659d205a87b667410df1fac49237fd9afb55f5a9820e0df4c0ce990a",
+    "rehab_pose/measures.py": "92538490e168d682fe733130d723a26f410fdb887aa092fe63d3759b74531289",
+    "rehab_pose/model.py": "80faaccc70a0f3c1218564eb8d48a56780ee92a7219274d5eb049bbc2700f69a",
+    "rehab_pose/run.py": "044571627f7fc0571a38cc18a40d08ffcd7c45bfaeff38f78f1e8b788d8fae98",
+    "rehab_pose/session.py": "2a82e9dbc136c69e1a00faf88cfebd923443875b005a91dce5ae964c79beaa1e",
+    "rehab_pose/slr.py": "e641d8c2a5d03c64d338fdfe43ff71e13e1136f63fd70ea7d71577d8be72d035",
+    "rehab_pose/squat.py": "1339d5bf54ec2fdfd0d8aecaf7f953e056777e27b350adbc273ffc79832291a4",
+    "rehab_pose/sts.py": "b60a40065be5cd7f1e41103e66c2a94b162f4d6d430f3b45fac5172933f831d8",
+    "rehab_pose/subject.py": "1960c44044f2d35e50ec5daf93e73c30775d2a4b1b07811219b8d66b768891ac",
+    "rehab_pose/subject_recovery.py": "cc6bcbdad28edfc03c01fe34ebe6c38db399aa9e3a16280b36957a46dc8c9ca7",
+    "rehab_pose/tracking.py": "a295b7a38f85431a7d46ddf159d7416b14590954bd39cb5a96a29484bede5bfa"
+  },
+  "runtime": {
+    "numpy": "2.5.3",
+    "opencv-contrib-python": "5.0.0.93",
+    "onnxruntime": "1.30.0",
+    "rtmlib": "0.0.16"
+  },
+  "input": {
+    "max_width": 960,
+    "jpeg_quality": 0.85,
+    "roi_mode": "detected-then-locked",
+    "confidence": 0.3
+  },
+  "reference_id": "53ffe8b2dfac0c5770436521aec0d6d262a21fa46e98cc0aefa8e990e910bc2d"
+}

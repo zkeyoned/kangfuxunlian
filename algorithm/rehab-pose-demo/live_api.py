@@ -1,7 +1,7 @@
-"""本机网页摄像头桥接服务。
+"""网页摄像头桥接服务，支持本机与受鉴权保护的公网 RTMPose。
 
 浏览器只发送临时 JPEG 帧；服务不会保存视频或关键点。姿态识别和动作状态机
-复用 rehab_pose 中的实现。此文件是本地联调层，不改变算法模块的数据结构。
+复用 rehab_pose 中的实现。公网部署与版本校验见 deploy/RTMPOSE_ROLLOUT.md。
 """
 from __future__ import annotations
 
@@ -14,6 +14,9 @@ from pathlib import Path
 import threading
 import time
 import uuid
+from functools import lru_cache
+from rtmpose_reference import verify as verify_reference
+from frame_batch import decode_batch, process_batch
 
 import numpy as np
 
@@ -43,7 +46,14 @@ from rehab_pose.auto_facing import AutoFacing
 
 ROOT = Path(__file__).resolve().parent
 REPO = ROOT.parent.parent
+RTM_MODEL_DIR = Path(os.environ.get("REHAB_RTMPOSE_MODEL_DIR", ROOT / "models" / "rtmpose"))
 MAX_BODY_BYTES = 2_500_000
+START_LOCK = threading.Lock()
+REMOTE_RTMPOSE = os.environ.get("REHAB_VISION_REMOTE_RTMPOSE", "off").lower() == "on"
+
+@lru_cache(maxsize=1)
+def reference_status():
+    return verify_reference(model_dir=RTM_MODEL_DIR) if REMOTE_RTMPOSE else {"ready":False,"reference_id":None}
 
 # 公网部署开关。默认值一律保持本机联调时的原有行为，
 # 只有部署脚本显式设置环境变量时才启用更严格的策略。
@@ -152,7 +162,7 @@ class LiveAnalyzer:
         self.facing = None if facing == "auto" else facing
         self.auto_facing = AutoFacing(exercise,self.config.min_confidence) if facing == "auto" else None
         self.model = (None if backend == "browser"
-                      else RTMPoseModel(ROOT / "models" / "rtmpose", "detected") if backend == "rtmpose"
+                      else RTMPoseModel(RTM_MODEL_DIR, "detected") if backend == "rtmpose"
                       else PoseModel(ROOT / "models" / "pose_landmarker_full.task"))
         # Reuse the desktop association logic with the already loaded tiny detector.
         # Only the initial single person is auto-selected; never switch after loss.
@@ -193,6 +203,7 @@ class LiveAnalyzer:
         self.last_seen = self.started
         self.feedback_history: list[dict] = []
         self.lock = threading.Lock()
+        self.batch_lock = threading.Lock()
         self.group_quality = {}
         self.finished = False
         self.cached_result = None
@@ -583,7 +594,8 @@ class Handler(BaseHTTPRequestHandler):
     def do_GET(self):
         if self._route() == "/healthz":
             return self._json(200, {"ok": True, "service": "rehab-vision", "sessions": len(SESSIONS),
-                                    "auth": "on" if VISION_AUTH else "off", "max_sessions": MAX_SESSIONS})
+                                    "auth": "on" if VISION_AUTH else "off", "max_sessions": MAX_SESSIONS,
+                                    "remote_rtmpose_ready": reference_status()["ready"], "reference_id": reference_status()["reference_id"]})
         self._json(404, {"error": "not_found"})
 
     def do_POST(self):
@@ -594,29 +606,37 @@ class Handler(BaseHTTPRequestHandler):
                     if len(SESSIONS) >= MAX_SESSIONS:
                         return self._json(429, {"error": "当前训练人数已满，请稍后再试"})
                 body = self._body()
+                if body.get("required_reference") or REMOTE_RTMPOSE:
+                    profile = reference_status()
+                    if not profile["ready"] or body.get("required_reference") != profile["reference_id"] or body.get("backend") != "rtmpose":
+                        return self._json(503, {"error":"服务器尚未准备好与本地一致的RTMPose模型及规则，请联系管理员部署；不会自动切换模型"})
                 if str(body.get("exercise","1")) == "2" and body.get("rule_version") != "slr_v0.1_surface":
                     raise ValueError("动作二已升级为床面角规则，请刷新网页后重新开始")
                 if str(body.get("exercise","1")) == "8" and body.get("rule_version") != "sts_v0.1_dual_baseline":
                     raise ValueError("坐站已升级为双基线规则，请刷新网页")
                 if str(body.get("exercise","1")) == "6" and body.get("rule_version") != "squat_v0.1_joint":
                     raise ValueError("微蹲已升级为膝屈曲规则，请刷新网页")
-                session = LiveAnalyzer(
-                    exercise=str(body.get("exercise", "1")),
-                    side=str(body.get("side", "left")),
-                    facing=str(body.get("facing", "auto")),
-                    sets=int(body.get("sets", 1)),
-                    reps=int(body.get("reps", 10)),
-                    backend=str(body.get("backend", "rtmpose")),
-                    targets=body.get("targets"),
-                )
-                session_id = uuid.uuid4().hex
-                session.owner = owner
-                with SESSIONS_LOCK:
-                    if len(SESSIONS) >= MAX_SESSIONS:
-                        session.close()
-                        return self._json(429, {"error": "当前训练人数已满，请稍后再试"})
-                    SESSIONS[session_id] = session
-                return self._json(200, {"session_id": session_id, "model": session.backend, "stores_video": False})
+                with START_LOCK:
+                    with SESSIONS_LOCK:
+                        if len(SESSIONS) >= MAX_SESSIONS:
+                            return self._json(429, {"error":"当前训练人数已满，请稍后再试"})
+                    session = LiveAnalyzer(
+                        exercise=str(body.get("exercise", "1")),
+                        side=str(body.get("side", "left")),
+                        facing=str(body.get("facing", "auto")),
+                        sets=int(body.get("sets", 1)),
+                        reps=int(body.get("reps", 10)),
+                        backend=str(body.get("backend", "rtmpose")),
+                        targets=body.get("targets"),
+                    )
+                    session_id = uuid.uuid4().hex
+                    session.owner = owner
+                    with SESSIONS_LOCK:
+                        if len(SESSIONS) >= MAX_SESSIONS:
+                            session.close()
+                            return self._json(429, {"error": "当前训练人数已满，请稍后再试"})
+                        SESSIONS[session_id] = session
+                    return self._json(200, {"session_id": session_id, "model": session.backend, "stores_video": False, "reference_id": reference_status()["reference_id"]})
 
             parts = self._route().strip("/").split("/")
             if len(parts) == 4 and parts[:2] == ["api", "live"]:
@@ -654,6 +674,11 @@ class Handler(BaseHTTPRequestHandler):
                         session.measures.reset()
                         session.analyzer.abort(session.analyzer.engine.last_t or 0, "facing_changed")
                     return self._json(200, {"facing": session.facing})
+                if action == "frames":
+                    if session.backend != "rtmpose": raise ValueError("图像批量入口仅支持RTMPose")
+                    decoded = decode_batch(self._body(), cv2)
+                    with session.batch_lock:
+                        return self._json(200, process_batch(session, decoded))
                 if action == "frame":
                     if cv2 is None:
                         raise ValueError("这台服务器只支持浏览器端出关键点的模式，请刷新网页后重试")
