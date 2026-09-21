@@ -62,7 +62,9 @@ fi
 # --exclude .venv 必须有：虚拟环境建在 $APP_DIR/.venv，而源目录没有它，
 # 少了这条 --delete 会在第二次部署时删掉正在用的 venv，且删不干净（目录非空），
 # 下一行的 .venv/bin/pip 随即 No such file or directory，重装必然中断。
-rsync -a --delete --exclude data --exclude .git --exclude __pycache__ --exclude .venv "$(cd "$(dirname "$0")/.." && pwd)/" "$APP_DIR/"
+# .vision-venv 与 models 同理：服务端 RTMPose 的推理环境和模型权重只存在于服务器上，
+# 不排除的话每次重新部署都会把它们删掉，要重装几百 MB 依赖并重新下载模型。
+rsync -a --delete --exclude data --exclude .git --exclude __pycache__ --exclude .venv --exclude .vision-venv --exclude models "$(cd "$(dirname "$0")/.." && pwd)/" "$APP_DIR/"
 cd "$APP_DIR"
 
 # 2.2 线上副本的接口地址适配
