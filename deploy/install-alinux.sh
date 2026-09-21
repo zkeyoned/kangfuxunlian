@@ -100,6 +100,12 @@ fi
 if [ -f frontend/app.js ]; then
   sed -i "s#new Worker(\"pose-worker.js\")#new Worker(\"pose-worker.js?v=$STAMP\")#g" frontend/app.js
 fi
+# 其它脚本里起的 worker（如 frame-encoder.js 里的 frame-encoder-worker.js?v=1）自带固定版本号，
+# 同样换成本次部署的戳，否则 worker 更新后访客仍会命中旧缓存。
+for js in frontend/*.js; do
+  [ -f "$js" ] || continue
+  sed -i -E "s#Worker\\((['\"])([a-z-]+\\.js)\\?v=[^'\"]*(['\"])#Worker(\\1\\2?v=$STAMP\\3#g" "$js"
+done
 
 # 2.4 生产环境移除页面上的演示凭证
 #
