@@ -779,14 +779,14 @@ async function stopLiveTraining(){
   return stoppingTraining;
 }
 async function finishLiveTraining(){
-  if(VISION_MODE==="remote"){remoteCapturing=false;clearTimeout(remoteTimer);if(remoteFrames)await remoteFrames.finish()}
+  if(VISION_MODE==="remote"){remoteCapturing=false;clearTimeout(remoteTimer);clearTimeout(remoteWatchdog);if(remoteFrames)await remoteFrames.finish()}
   const videoFinished=finishTrainingVideo();
   cameraRequestGeneration++;trainingRunning=false;clearTimeout(trainingTimer);clearTimeout(captureTimer);LANDMARK_QUEUE.length=0;const id=visionSessionId;visionSessionId=null;cameraStream?.getTracks().forEach(track=>track.stop());cameraStream=null;$("#training-video").srcObject=null;$(".camera-stage").classList.remove("live");$("#pose-overlay").getContext("2d").clearRect(0,0,$("#pose-overlay").width,$("#pose-overlay").height);$(".camera-state").innerHTML="<i></i>摄像头已停止";
   const owner=trainingOwner;trainingOwner=null;
   let result=null;if(id){try{result=await visionApi(`/${id}/stop`,{})}catch(error){showToast(error.message)}}
   const button=$("#start-training");button.disabled=false;button.textContent="允许摄像头并开始识别";
-  if(VISION_MODE==="remote"&&remoteFrames?.failed&&result?.brief_report){
-    result.brief_report.suggestions.unshift("本次因网络或服务器中断而停止，次数仅代表已识别部分，不能判断完整训练完成情况。");
+  if(VISION_MODE==="remote"&&(remoteFrames?.failed||remoteFrames?.dropped)&&result?.brief_report){
+    result.brief_report.suggestions.unshift("本次发生网络中断或跳过拥塞画面，次数仅代表已识别部分，不能判断完整训练完成情况。");
   }
   await videoFinished;
   if(result&&owner&&currentUser?.id===owner.userId){
@@ -1251,43 +1251,68 @@ async function selectBrowserSubject(x,y){
 
 // Remote RTMPose: same JPEG preprocessing and original server process, paired display.
 const RTM_REFERENCE="53ffe8b2dfac0c5770436521aec0d6d262a21fa46e98cc0aefa8e990e910bc2d";
-let remoteFrames=null,remoteCapturing=false,remoteTimer=null,remoteFrameSeq=0;
+let remoteFrames=null,remoteCapturing=false,remoteTimer=null,remoteFrameSeq=0,remoteWatchdog=null;
 function startRemoteFrames(){
   remoteCapturing=true;const generation=cameraRequestGeneration,id=visionSessionId;
+  let interval=100,lastDisplayedAt=performance.now();
+  const cameraCanvas=document.createElement("canvas");
+  function showDelayed(){
+    const overlay=$("#pose-overlay");overlay.getContext("2d").clearRect(0,0,overlay.width,overlay.height);lastVisionResult=null;
+    $(".camera-state").textContent="实时预览 · 识别结果延迟";
+    $("#live-cue").textContent="网络或服务器较慢，请暂停动作";
+    $("#live-cue-detail").textContent="当前显示实时摄像头，旧角度已隐藏；恢复后请回到起始姿势。";
+    $("#phase-name").textContent="等待及时的识别结果";
+    $("#live-metrics").querySelectorAll("b").forEach(node=>node.textContent="--");
+  }
+  function watch(){
+    if(!remoteCapturing||generation!==cameraRequestGeneration||!trainingRunning)return;
+    if(performance.now()-lastDisplayedAt>1500)showDelayed();
+    remoteWatchdog=setTimeout(watch,250);
+  }
+  clearTimeout(remoteWatchdog);watch();
   remoteFrames=new FrameQueue(async batch=>{
-    const response=await fetch(`${VISION_BASE}/${id}/frames`,{method:"POST",headers:visionHeaders({"Content-Type":"application/json"}),body:JSON.stringify({frames:batch}),signal:AbortSignal.timeout(20000)});
-    const result=await response.json();if(!response.ok)throw Error(result.error||"服务器识别失败");return result;
+    const started=performance.now();
+    const response=await fetch(`${VISION_BASE}/${id}/frames`,{method:"POST",headers:visionHeaders({"Content-Type":"application/json"}),body:JSON.stringify({frames:batch}),signal:AbortSignal.timeout(5000)});
+    const result=await response.json();if(!response.ok)throw Error(result.error||"服务器识别失败");
+    const elapsed=performance.now()-started;
+    interval=Math.max(100,Math.min(200,elapsed/batch.length*1.1));
+    const samples=window.__remotePerformance ||= [];samples.push({request_ms:elapsed,batch_frames:batch.length,last_frame_processing_ms:result.processing_ms,queued:remoteFrames.queue.length,skipped:remoteFrames.dropped});if(samples.length>120)samples.shift();
+    return result;
   },async(result,batch)=>{
     if(generation!==cameraRequestGeneration||!trainingRunning)return;
     const frame=batch.find(f=>f.frame_id===result.frame_id);
     if(!frame||Math.abs(frame.timestamp_s-result.timestamp_s)>.001)throw Error("识别结果与画面编号不一致，已停止采集");
+    if(result.training_progress?.status==="completed")setTimeout(()=>stopLiveTraining(),0);
+    if((performance.now()-captureStart)/1000-frame.timestamp_s>1.5){showDelayed();return}
     const img=new Image();await new Promise((resolve,reject)=>{img.onload=resolve;img.onerror=()=>reject(Error("识别画面解码失败"));img.src="data:image/jpeg;base64,"+frame.image});
     if(generation!==cameraRequestGeneration||!trainingRunning)return;
-    captureCanvas.width=img.naturalWidth;captureCanvas.height=img.naturalHeight;captureCanvas.getContext("2d").drawImage(img,0,0);
+    if((performance.now()-captureStart)/1000-frame.timestamp_s>1.5){showDelayed();return}
+    lastDisplayedAt=captureStart+frame.timestamp_s*1000;
+    if(captureCanvas.width!==img.naturalWidth)captureCanvas.width=img.naturalWidth;if(captureCanvas.height!==img.naturalHeight)captureCanvas.height=img.naturalHeight;captureCanvas.getContext("2d").drawImage(img,0,0);
     updateLiveResult(result);
     const age=Math.max(0,(performance.now()-captureStart)/1000-frame.timestamp_s);
     $(".camera-state").textContent=`RTMPose · 已识别画面 · 延迟 ${age.toFixed(1)}秒`;
-    if(age>2)$("#live-cue-detail").textContent="网络或服务器较慢，正在显示已识别画面，数值与该画面对应。";
-    if(result.training_progress?.status==="completed")setTimeout(()=>stopLiveTraining(),0);
+    if(remoteFrames.dropped)$("#live-cue-detail").textContent+=" · 已跳过拥塞画面，次数仅含已识别部分";
   },error=>{
-    remoteCapturing=false;clearTimeout(remoteTimer);
+    if(generation!==cameraRequestGeneration||!trainingRunning)return;
+    remoteCapturing=false;clearTimeout(remoteTimer);clearTimeout(remoteWatchdog);showDelayed();
     showToast(error.message);$("#live-cue").textContent="网络或服务器中断，正在保存已识别结果";
     setTimeout(()=>stopLiveTraining(),0);
-  });
+  },{live:true,now:()=>(performance.now()-captureStart)/1000});
   async function capture(){
     if(!remoteCapturing||generation!==cameraRequestGeneration||!trainingRunning)return;
     try{
       const video=$("#training-video");
       if(video.readyState>=2&&!remoteFrames.paused){
         const timestamp_s=(performance.now()-captureStart)/1000;
-        const canvas=document.createElement("canvas"),scale=Math.min(1,960/video.videoWidth,960/video.videoHeight);
-        canvas.width=Math.round(video.videoWidth*scale);canvas.height=Math.round(video.videoHeight*scale);canvas.getContext("2d").drawImage(video,0,0,canvas.width,canvas.height);
+        const canvas=cameraCanvas,scale=Math.min(1,960/video.videoWidth,960/video.videoHeight);
+        const width=Math.round(video.videoWidth*scale),height=Math.round(video.videoHeight*scale);if(canvas.width!==width)canvas.width=width;if(canvas.height!==height)canvas.height=height;canvas.getContext("2d").drawImage(video,0,0,canvas.width,canvas.height);
         const url=canvas.toDataURL("image/jpeg",.85),image=url.slice(url.indexOf(",")+1);
         if(image.length>280000)throw Error("摄像头画面数据过大，请降低摄像头分辨率后重试");
         remoteFrames.add({image,timestamp_s,frame_id:++remoteFrameSeq});
       }
     }catch(e){remoteFrames.fail(e)}
-    if(remoteCapturing&&generation===cameraRequestGeneration)remoteTimer=setTimeout(capture,100);
+    if(remoteCapturing&&generation===cameraRequestGeneration)remoteTimer=setTimeout(capture,interval);
   }
   capture();
 }
