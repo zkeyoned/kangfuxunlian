@@ -90,6 +90,9 @@ STAMP=$(date +%Y%m%d%H%M%S)
 if [ -f frontend/index.html ]; then
   sed -i "s#src=\"app.js\"#src=\"app.js?v=$STAMP\"#g" frontend/index.html
   sed -i "s#href=\"styles.css\"#href=\"styles.css?v=$STAMP\"#g" frontend/index.html
+  # 其它同页脚本（如 subject-lock.js）可能自带固定版本号，一并换成本次部署的戳，
+  # 否则它们更新后访客仍会命中旧缓存。
+  sed -i -E "s#src=\"([a-z-]+\.js)(\?v=[^\"]*)?\"#src=\"\1?v=$STAMP\"#g" frontend/index.html
 fi
 # worker 是 app.js 用 new Worker() 起的，同样要带版本，否则改了识别逻辑也不生效。
 if [ -f frontend/app.js ]; then
