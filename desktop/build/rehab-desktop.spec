@@ -6,6 +6,7 @@
 
 用法见同目录的 build-macos.sh 与 build-windows.ps1，不要直接手敲 pyinstaller。
 """
+import sys
 from pathlib import Path
 
 REPO = Path(SPECPATH).resolve().parents[1]
@@ -77,6 +78,8 @@ exe = EXE(
     strip=False,
     upx=False,
     console=False,
+    # Windows 的 exe 图标；macOS 的图标在下面 BUNDLE 里单独指定。
+    icon=str(Path(SPECPATH) / "icon" / "kangshifu.ico") if sys.platform == "win32" else None,
     disable_windowed_traceback=False,
     argv_emulation=False,
     target_arch=None,
@@ -97,7 +100,8 @@ coll = COLLECT(
 app = BUNDLE(
     coll,
     name="康师复.app",
-    icon=None,
+    # 与网站登录页左上角的标识同款：品牌绿圆角方块加白色「复」字。
+    icon=str(Path(SPECPATH) / "icon" / "kangshifu.icns"),
     # 反向域名格式的包标识符，只是个本机标识，不对应任何真实域名或服务器。
     bundle_identifier="local.kangshifu.desktop",
     version=VERSION,
