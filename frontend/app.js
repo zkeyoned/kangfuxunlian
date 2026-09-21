@@ -13,7 +13,7 @@ const exercises = [
     ],
     live: [["膝伸展", "168", "°"], ["顶点保持", "1.4", "秒"], ["本组次数", "8", "/ 10"], ["下放时间", "0.9", "秒"]],
     cues: [["伸展", "再伸直一点", "膝关节还差约 7° 达到目标"], ["保持", "保持住，继续 1.6 秒", "计时从达到目标角度后开始"], ["回落", "慢一点放下", "控制下放约 2 秒，不要突然落下"]],
-    rules: [["次数",10,"次"],["伸膝角度",175,"° 以上"],["顶点保持",3,"秒"],["下放时间",2,"秒"]]
+    rules: [["次数",10,"次"],["伸膝角度",175,"° 以上"],["顶点保持",1,"秒"],["下放时间",2,"秒"]]
   },
   {
     id: "supine", name: "卧姿直腿抬高", short: "仰卧抬腿", image: "assets/supine-leg-raise-v2.jpg", dose: "2 组 × 8 次", done: false,
@@ -56,7 +56,7 @@ exercises.find(e=>e.id==="stand").note="双脚踩稳，上身稍向前，慢慢�
 Object.assign(exercises.find(e=>e.id==="squat"),{flow:"双手扶稳 → 缓慢屈膝下蹲 → 短暂停留 → 慢慢站回",note:"固定水平侧面拍摄，让肩、髋、膝、踝可见。双手扶稳椅背或固定台面，双脚约髋宽；先舒适站稳2秒。慢慢下蹲至设定目标附近，允许正常前倾，不追求蹲得更深。短暂停留后慢慢站回。"});
 let patientTrainingSource="empty",selfTrainingSelection=null,selfSelectionSignature=null;
 let visualPlan=null,visualPlanUser=null,activePrescriptionSnapshot=null,planLoadGeneration=0;
-function defaultTargets(id){return {target_deg:{seated:170,supine:30,squat:30,stand:165}[id],hold_s:{seated:3,supine:5,squat:1,stand:1}[id],return_s:1,rest_s:30}}
+function defaultTargets(id){return {target_deg:{seated:170,supine:30,squat:30,stand:165}[id],hold_s:{seated:1,supine:5,squat:1,stand:1}[id],return_s:1,rest_s:30}}
 function availableExercises(){return exercises.filter(ex=>patientTrainingSource!=="empty"&&ex.planSelected)}
 function targetDescription(ex){const t=ex.targets||defaultTargets(ex.id);if(ex.id==="squat")return `膝屈曲目标 ${t.target_deg}°，进入±5°、维持±8°，髋部需同时下降；${t.hold_s===0?"不停顿模式":`连续保持${t.hold_s}秒`}；缓慢蹲下与站回；先确认支撑、舒适站立标定2秒`;if(ex.id==="stand")return `膝夹角≥${t.target_deg}°、髋上升≥90%、距站姿躯干基线≤10°联合确认；连续站稳${t.hold_s}秒，坐回后计完整次数；须坐姿/站姿双标定`;if(ex.id==="supine")return `床面抬腿目标 ${t.target_deg}°；进入±5°且膝屈曲≤10°，维持±8°且膝屈曲≤15°；联合保持 ${t.hold_s}秒；抬起/放下约2–3秒（提示下限1秒）；参考线需标定`;const label={seated:"膝夹角",supine:"床面抬腿角",squat:"膝屈曲角",stand:"站直膝夹角"}[ex.id];return `${label} ≥ ${t.target_deg}°；保持 ≥ ${t.hold_s}秒；返回 ≥ ${t.return_s}秒；组间休息 ${t.rest_s}秒`}
 function renderPlanEditor(){
@@ -244,7 +244,7 @@ function updateDurationEstimates(){
   exercises.forEach(ex=>{
     const node=$(`[data-duration="${ex.id}"]`);
     if(node){
-      const seconds=estimateExerciseSeconds(ex),hold={seated:3,supine:5,squat:1,stand:1}[ex.id]??0;
+      const seconds=estimateExerciseSeconds(ex);
       node.textContent=estimateMinutes(seconds);
       node.title=`${ex.groups}组×${ex.reps}次；${targetDescription(ex)}；按往返各至少2秒估算，不含准备与额外暂停。`;
     }
