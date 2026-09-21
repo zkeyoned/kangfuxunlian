@@ -1,0 +1,32 @@
+[Unit]
+Description=RehabTrack Vision Rules Service
+After=network.target
+
+[Service]
+User=rehab
+WorkingDirectory=/opt/rehabtrack
+Environment=REHAB_DATA_DIR=/var/lib/rehabtrack
+# 只监听本机，外面一律经 cloudflared 隧道进来
+Environment=REHAB_VISION_BIND=127.0.0.1
+# 服务器上 8802 已被其它项目占用，这里用 8803；
+# 端口对前端透明，隧道按路径转发，前端只认 /vision 这个前缀。
+Environment=REHAB_VISION_PORT=8803
+# 公网模式必须开鉴权：复用业务后端同一套登录令牌
+# 隧道按 /vision 前缀转发且不剥前缀，这里告诉服务把它去掉
+Environment=REHAB_VISION_PREFIX=/vision
+Environment=REHAB_VISION_AUTH=on
+Environment=REHAB_VISION_MAX_SESSIONS=8
+Environment=REHAB_VISION_IDLE_S=120
+ExecStart=/opt/rehabtrack/.venv/bin/python algorithm/rehab-pose-demo/live_api.py
+Restart=always
+RestartSec=3
+NoNewPrivileges=true
+PrivateTmp=true
+# 2 核 2G 的机器上，规则服务不能把业务后端一起拖垮。
+# 浏览器模式下这个进程不加载任何模型，常驻内存很小，这几道闸是防跑偏用的。
+MemoryMax=600M
+CPUQuota=60%
+TasksMax=64
+
+[Install]
+WantedBy=multi-user.target
