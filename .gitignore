@@ -22,3 +22,8 @@ node_modules/
 *.avi
 algorithm/experiments/**/*.npy
 algorithm/experiments/**/*.json.gz
+
+# 浏览器端识别用的运行库与模型（约 43MB）。
+# 与 algorithm/models 同理不入库，由 deploy/prepare-vendor.sh 准备，
+# 部署时随 frontend/ 一起同步到服务器。
+frontend/vendor/mediapipe/

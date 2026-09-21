@@ -109,7 +109,22 @@ async function syncVisualPlan(){
 const $ = selector => document.querySelector(selector);
 const $$ = selector => [...document.querySelectorAll(selector)];
 const API_BASE = "http://127.0.0.1:8801/api/v1";
-const VISION_BASE = "http://127.0.0.1:8802/api/live";
+// 视觉链路有两种跑法，按访问来源自动选，也可用 ?vision=local|browser 手动覆盖：
+//   local   —— 识别跑在用户自己电脑上的 Python 服务（8802），画面以 JPEG 上传。
+//              需要先在本机装好并启动视觉服务，Safari 与手机用不了。
+//   browser —— 识别跑在浏览器里，只把 33 个关键点发给服务端跑规则。
+//              什么都不用装，手机和 Safari 都能用。
+const VISION_LOCAL_BASE = "http://127.0.0.1:8802/api/live";
+const VISION_REMOTE_BASE = "/vision/api/live";
+const IS_LOCAL_HOST = ["localhost", "127.0.0.1", "[::1]", ""].includes(location.hostname);
+const VISION_MODE = (() => {
+  const forced = new URLSearchParams(location.search).get("vision");
+  if (forced === "local" || forced === "browser") return forced;
+  return IS_LOCAL_HOST ? "local" : "browser";
+})();
+// 本机打开页面时，两种模式都直连 8802：本地没有 /vision 这条反向代理路由，
+// 而且本地页面本身是 http，不存在 https 访问本机 http 的限制。
+const VISION_BASE = (VISION_MODE === "local" || IS_LOCAL_HOST) ? VISION_LOCAL_BASE : VISION_REMOTE_BASE;
 const EXERCISE_TO_VISION = {seated:"1",supine:"2",squat:"6",stand:"8"};
 let apiToken = sessionStorage.getItem("kangshifu_api_token") || "";
 let backendPlan = null;
@@ -458,8 +473,15 @@ function openTraining(id){
   $("#training-screen").classList.add("active"); $("#training-screen").setAttribute("aria-hidden","false"); document.body.classList.add("training-open");
 }
 
+function visionHeaders(extra){
+  // 浏览器模式下视觉服务对公网开放，复用业务后端同一套登录令牌。
+  const headers={...(extra||{})};
+  if(VISION_MODE==="browser"&&apiToken)headers.Authorization=`Bearer ${apiToken}`;
+  return headers;
+}
+
 async function visionApi(path,body){
-  const response=await fetch(`${VISION_BASE}${path}`,{method:"POST",headers:{"Content-Type":"application/json"},body:JSON.stringify(body||{}),signal:AbortSignal.timeout(15000)});
+  const response=await fetch(`${VISION_BASE}${path}`,{method:"POST",headers:visionHeaders({"Content-Type":"application/json"}),body:JSON.stringify(body||{}),signal:AbortSignal.timeout(15000)});
   const payload=await response.json().catch(()=>({error:`HTTP ${response.status}`}));
   if(!response.ok){const error=new Error(payload.error||payload.detail||`视觉服务错误（${response.status}）`);error.status=response.status;throw error}
   return payload;
@@ -513,8 +535,10 @@ function drawPose(result){
 
 function fmt(value,digits=1){return Number.isFinite(value)?Number(value).toFixed(digits):"--"}
 
-function updateLiveResult(result){
-  drawPose(result);
+function updateLiveResult(result,options){
+  if(VISION_MODE==="browser")lastVisionResult={...result,subject:browserSubject};
+  // 浏览器模式下骨架已用本地关键点画好（不等服务端往返），这里不再重画。
+  if(!(options&&options.skipOverlay))drawPose(result);
   const phaseNames={waiting_for_rest:"等待起始姿势",rest:"起始位",extending:"运动中",holding:"保持",returning:"返回",waiting_for_points:"识别暂停"};
   $("#phase-name").textContent=phaseNames[result.phase]||result.phase;
   $("#live-cue").textContent=result.guidance?.message||"正在识别";
@@ -527,6 +551,148 @@ function updateLiveResult(result){
   $("#live-metrics").innerHTML=values.map(v=>`<div class="live-metric"><span>${v[0]}</span><b>${v[1]}</b><small>${v[2]}</small></div>`).join("");
   (result.feedback_events||[]).forEach(event=>$("#cue-log").insertAdjacentHTML("afterbegin",`<li><time>${fmt(event.timestamp_s)}秒</time><p>${escapeHtml(event.message)}</p></li>`));
 }
+
+// ===== 浏览器端识别 =====
+// 识别在本页面里完成，只把 33 个关键点发给服务端跑规则；画面不离开用户设备。
+let poseWorker=null,poseWorkerReady=null,poseFrameSeq=0;
+const poseWaiters=new Map();
+
+function ensurePoseWorker(){
+  if(poseWorkerReady)return poseWorkerReady;
+  poseWorkerReady=new Promise((resolve,reject)=>{
+    let worker;
+    try{worker=new Worker("pose-worker.js")}
+    catch(error){reject(new Error("当前浏览器不支持所需的识别模块，请换用较新的浏览器"));return}
+    poseWorker=worker;
+    // 首次要下载约 20MB 的运行库与模型，网络慢时给足时间。
+    const timer=setTimeout(()=>reject(new Error("识别模型加载超时，请检查网络后重试")),180000);
+    worker.onmessage=event=>{
+      const msg=event.data||{};
+      if(msg.type==="ready"){clearTimeout(timer);resolve();return}
+      if(msg.type==="error"){clearTimeout(timer);reject(new Error(msg.message||"识别模型加载失败"));return}
+      if(msg.type==="result"){const waiter=poseWaiters.get(msg.id);if(waiter){poseWaiters.delete(msg.id);waiter(msg)}}
+    };
+    worker.onerror=()=>{clearTimeout(timer);reject(new Error("识别模块加载失败"))};
+    worker.postMessage({type:"init"});
+  }).catch(error=>{poseWorker=null;poseWorkerReady=null;throw error});
+  return poseWorkerReady;
+}
+
+function releasePoseWorker(){
+  poseWaiters.clear();
+  if(poseWorker){poseWorker.terminate();poseWorker=null;poseWorkerReady=null}
+}
+
+function detectLandmarks(bitmap,width,height,timestamp_s){
+  return new Promise((resolve,reject)=>{
+    const id=++poseFrameSeq;
+    const timer=setTimeout(()=>{if(poseWaiters.delete(id))reject(new Error("识别超时"))},15000);
+    poseWaiters.set(id,msg=>{clearTimeout(timer);msg.error?reject(new Error(msg.error)):resolve(msg)});
+    // bitmap 直接转交给 worker，不复制像素。
+    poseWorker.postMessage({type:"frame",id,bitmap,width,height,timestamp_s},[bitmap]);
+  });
+}
+
+// 关键点先在本地画出来，不等服务端往返，这样公网延迟不会变成画面卡顿。
+const browserLock=new BrowserSubjectLock();
+let browserSubject=null,browserSelectionBusy=false,browserLastTime=0,browserLockEpoch=0;
+const POSE_LINES=[[11,23],[23,25],[25,27],[12,24],[24,26],[26,28],[11,12],[23,24]];
+function drawLocalSkeleton(landmarks,width,height){
+  const canvas=$("#pose-overlay"),context=canvas.getContext("2d");
+  if(canvas.width!==width||canvas.height!==height){canvas.width=width;canvas.height=height}
+  context.clearRect(0,0,canvas.width,canvas.height);
+  if(!landmarks)return;
+  const visible=point=>point&&Math.min(point.visibility,point.presence)>=.5;
+  context.lineWidth=Math.max(2,width/240);context.strokeStyle="rgba(46,160,120,.9)";
+  POSE_LINES.forEach(([a,b])=>{
+    const from=landmarks[a],to=landmarks[b];
+    if(!visible(from)||!visible(to))return;
+    context.beginPath();context.moveTo((previewFlipped?1-from.x:from.x)*width,from.y*height);context.lineTo((previewFlipped?1-to.x:to.x)*width,to.y*height);context.stroke();
+  });
+  context.fillStyle="rgba(255,255,255,.95)";
+  [11,12,23,24,25,26,27,28].forEach(index=>{
+    const point=landmarks[index];if(!visible(point))return;
+    context.beginPath();context.arc((previewFlipped?1-point.x:point.x)*width,point.y*height,Math.max(3,width/260),0,Math.PI*2);context.fill();
+  });
+}
+
+// 采集与上报分成两条独立的循环。
+//
+// 采集循环只做"识别 + 本地画骨架 + 入队"，不等网络，所以画面永远跟手。
+// 上报循环把队列里攒下的帧一次发走，公网往返实测在几百毫秒量级，逐帧单发会把
+// 帧率压到 1-2 fps；合批之后往返被摊薄，而时间戳是采集时打的，规则层对时长和
+// 保持时间的判断不受影响。
+const LANDMARK_QUEUE=[];
+const MAX_BATCH=40;          // 与服务端 MAX_FRAMES_PER_BATCH 一致
+const MAX_QUEUE=120;         // 网络长时间卡住时最多积压 8 秒，超出丢最旧的
+let uploadBusy=false,captureTimer=null;
+
+async function captureLandmarksLoop(){
+  if(!trainingRunning)return;
+  const lockEpoch=browserLockEpoch;
+  const generation=cameraRequestGeneration;
+  const video=$("#training-video");
+  if(video.readyState<2){captureTimer=setTimeout(captureLandmarksLoop,180);return}
+  const frameStart=performance.now();
+  try{
+    const timestamp_s=(frameStart-captureStart)/1000;
+    const width=video.videoWidth,height=video.videoHeight;
+    const bitmap=await createImageBitmap(video);
+    const detected=await detectLandmarks(bitmap,width,height,timestamp_s);
+    if(browserSelectionBusy||lockEpoch!==browserLockEpoch||generation!==cameraRequestGeneration||!trainingRunning)return;
+    browserLastTime=timestamp_s;
+    const tracked=browserLock.update(detected.candidates||[],timestamp_s);
+    browserSubject={...tracked.subject,boxes:tracked.subject.boxes.map(b=>[b[0]*width,b[1]*height,b[2]*width,b[3]*height])};
+    detected.landmarks=tracked.landmarks;detected.pose_status=tracked.pose_status;
+    if(generation!==cameraRequestGeneration||!trainingRunning)return;
+    drawLocalSkeleton(detected.landmarks,width,height);
+    lastVisionResult={...(lastVisionResult||{}),subject:browserSubject};
+    const ctx=$("#pose-overlay").getContext("2d");
+    if(browserSubject.status!=="locked"){ctx.strokeStyle="#f2a65a";ctx.lineWidth=2;for(const b of browserSubject.boxes)ctx.strokeRect(previewFlipped?width-b[2]:b[0],b[1],b[2]-b[0],b[3]-b[1]);}
+    showBrowserLockStatus();
+    LANDMARK_QUEUE.push({landmarks:detected.landmarks||[],pose_status:detected.pose_status,width,height,timestamp_s});
+    // 丢最旧的而不是最新的：规则层要求时间戳递增，丢掉已经排在前面的帧不影响后续判定。
+    while(LANDMARK_QUEUE.length>MAX_QUEUE)LANDMARK_QUEUE.shift();
+    $(".camera-state").textContent=`浏览器识别 · ${Math.round(performance.now()-frameStart)} ms/帧`;
+    uploadLandmarksLoop();
+  }catch(error){
+    if(generation===cameraRequestGeneration&&trainingRunning){$("#live-cue").textContent="识别暂时中断";$("#live-cue-detail").textContent=error.message}
+  }
+  finally{
+    if(trainingRunning&&generation===cameraRequestGeneration)
+      captureTimer=setTimeout(captureLandmarksLoop,Math.max(0,66-(performance.now()-frameStart)));
+  }
+}
+
+async function uploadLandmarksLoop(){
+  if(uploadBusy||browserSelectionBusy||!trainingRunning||!LANDMARK_QUEUE.length)return;
+  uploadBusy=true;
+  const generation=cameraRequestGeneration,id=visionSessionId;
+  const batch=LANDMARK_QUEUE.splice(0,MAX_BATCH);
+  try{
+    const response=await fetch(`${VISION_BASE}/${id}/landmarks`,{
+      method:"POST",headers:visionHeaders({"Content-Type":"application/json"}),
+      body:JSON.stringify({frames:batch}),signal:AbortSignal.timeout(20000)});
+    const result=await response.json();
+    if(!response.ok){const error=new Error(result.error||"识别失败");error.status=response.status;throw error}
+    if(generation===cameraRequestGeneration&&trainingRunning){
+      updateLiveResult(result,{skipOverlay:true});showBrowserLockStatus();
+      if(result.training_progress?.status==="completed"){await stopLiveTraining();return}
+    }
+  }catch(error){
+    if(generation===cameraRequestGeneration&&trainingRunning&&error.status===404){expireVisionSession();return}
+    if(generation===cameraRequestGeneration&&trainingRunning){$("#live-cue").textContent="识别暂时中断";$("#live-cue-detail").textContent=error.message}
+  }
+  finally{
+    uploadBusy=false;
+    // 队列里还有就接着发，保持单飞，避免乱序到达
+    if(trainingRunning&&generation===cameraRequestGeneration&&LANDMARK_QUEUE.length)setTimeout(uploadLandmarksLoop,0);
+  }
+}
+
+function startLandmarksPipeline(){browserLock.reset();browserSubject=null;LANDMARK_QUEUE.length=0;uploadBusy=false;captureLandmarksLoop()}
+
+function sendVisionFrame(){return VISION_MODE==="browser"?startLandmarksPipeline():sendCameraFrame()}
 
 async function sendCameraFrame(){
   if(!trainingRunning||frameBusy)return;
@@ -573,13 +739,20 @@ async function startLiveTraining(){
   const button=$("#start-training");button.disabled=true;button.textContent="正在启动摄像头…";
   try{
     activePrescriptionSnapshot={id:visualPlan?.id??null,requirements:visualPlan?structuredClone(visualPlan):null,exercise_id:activeExercise.id,sets:activeExercise.groups,reps:activeExercise.reps,targets:structuredClone(activeExercise.targets||defaultTargets(activeExercise.id))};
+    if(VISION_MODE==="browser"){
+      button.textContent="正在准备识别模型…";
+      $("#live-cue").textContent="正在准备识别模型";
+      $("#live-cue-detail").textContent="首次使用需要下载约 20MB 的识别模型，之后会被浏览器缓存。";
+      await ensurePoseWorker();
+      button.textContent="正在启动摄像头…";
+    }
     const requestedStream=await navigator.mediaDevices.getUserMedia({video:{width:{ideal:1280},height:{ideal:720}},audio:false});
     if(requestGeneration!==cameraRequestGeneration){requestedStream.getTracks().forEach(track=>track.stop());return}
     cameraStream=requestedStream;
     const video=$("#training-video");video.srcObject=cameraStream;await video.play();
-    const started=await visionApi("/start",{rule_version:activeExercise.id==="supine"?"slr_v0.1_surface":activeExercise.id==="stand"?"sts_v0.1_dual_baseline":activeExercise.id==="squat"?"squat_v0.1_joint":null,exercise:EXERCISE_TO_VISION[activeExercise.id],side:$("#training-side").value,sets:activeExercise.groups,reps:activeExercise.reps,targets:activeExercise.targets||defaultTargets(activeExercise.id)});
+    const started=await visionApi("/start",{backend:VISION_MODE==="browser"?"browser":undefined,rule_version:activeExercise.id==="supine"?"slr_v0.1_surface":activeExercise.id==="stand"?"sts_v0.1_dual_baseline":activeExercise.id==="squat"?"squat_v0.1_joint":null,exercise:EXERCISE_TO_VISION[activeExercise.id],side:$("#training-side").value,sets:activeExercise.groups,reps:activeExercise.reps,targets:activeExercise.targets||defaultTargets(activeExercise.id)});
     if(requestGeneration!==cameraRequestGeneration){await visionApi(`/${started.session_id}/stop`,{});return}
-    trainingOwner={userId:currentUser.id,exerciseId:activeExercise.id,clientId:started.session_id};captureStart=performance.now();visionSessionId=started.session_id;trainingRunning=true;startTrainingVideo(trainingOwner);$(".camera-stage").classList.add("live");$(".camera-state").innerHTML="<i></i>视觉算法已连接";button.disabled=false;button.textContent="结束本次训练";sendCameraFrame();
+    trainingOwner={userId:currentUser.id,exerciseId:activeExercise.id,clientId:started.session_id};captureStart=performance.now();visionSessionId=started.session_id;trainingRunning=true;startTrainingVideo(trainingOwner);$(".camera-stage").classList.add("live");$(".camera-state").innerHTML="<i></i>视觉算法已连接";button.disabled=false;button.textContent="结束本次训练";sendVisionFrame();
   }catch(error){cameraStream?.getTracks().forEach(track=>track.stop());cameraStream=null;button.disabled=false;button.textContent="重新允许摄像头";$("#live-cue").textContent="无法开始识别";$("#live-cue-detail").textContent=error.message}
 }
 
@@ -590,7 +763,7 @@ async function stopLiveTraining(){
 }
 async function finishLiveTraining(){
   const videoFinished=finishTrainingVideo();
-  cameraRequestGeneration++;trainingRunning=false;clearTimeout(trainingTimer);const id=visionSessionId;visionSessionId=null;cameraStream?.getTracks().forEach(track=>track.stop());cameraStream=null;$("#training-video").srcObject=null;$(".camera-stage").classList.remove("live");$("#pose-overlay").getContext("2d").clearRect(0,0,$("#pose-overlay").width,$("#pose-overlay").height);$(".camera-state").innerHTML="<i></i>摄像头已停止";
+  cameraRequestGeneration++;trainingRunning=false;clearTimeout(trainingTimer);clearTimeout(captureTimer);LANDMARK_QUEUE.length=0;const id=visionSessionId;visionSessionId=null;cameraStream?.getTracks().forEach(track=>track.stop());cameraStream=null;$("#training-video").srcObject=null;$(".camera-stage").classList.remove("live");$("#pose-overlay").getContext("2d").clearRect(0,0,$("#pose-overlay").width,$("#pose-overlay").height);$(".camera-state").innerHTML="<i></i>摄像头已停止";
   const owner=trainingOwner;trainingOwner=null;
   let result=null;if(id){try{result=await visionApi(`/${id}/stop`,{})}catch(error){showToast(error.message)}}
   const button=$("#start-training");button.disabled=false;button.textContent="允许摄像头并开始识别";
@@ -760,11 +933,11 @@ $("#pose-overlay").addEventListener("click",async event=>{
     if(surfaceSelection.length===1){showToast("再点击床沿靠脚端的第二点");return}
     try{await visionApi(`/${visionSessionId}/surface`,{points:surfaceSelection});showToast("床面已标定，请放平训练腿并保持2秒");surfaceSelection=null}catch(e){surfaceSelection=[];showToast(e.message)}return;
   }
-  try{await visionApi(`/${visionSessionId}/subject`,{x,y})}catch(e){if(e.status===404)expireVisionSession();else showToast(e.message)}
+  try{if(VISION_MODE==="browser")await selectBrowserSubject(x/c.width,y/c.height);else await visionApi(`/${visionSessionId}/subject`,{x,y})}catch(e){if(e.status===404)expireVisionSession();else showToast(e.message)}
 });
 $("#reselect-subject").addEventListener("click",async()=>{
   if(!trainingRunning)return;
-  try{await visionApi(`/${visionSessionId}/subject`,{reset:true})}catch(e){if(e.status===404)expireVisionSession();else showToast(e.message)}
+  try{if(VISION_MODE==="browser")await selectBrowserSubject(null,null);else await visionApi(`/${visionSessionId}/subject`,{reset:true})}catch(e){if(e.status===404)expireVisionSession();else showToast(e.message)}
 });
 
 function showTrainingReport(result){
@@ -1036,3 +1209,21 @@ document.addEventListener('click',e=>{if(e.target.closest('[data-add-selection]'
 $("#save-training-selection").addEventListener('click',()=>saveTrainingSelection());
 $("#clear-training-selection").addEventListener('click',()=>saveTrainingSelection(true));
 $("#cancel-training-selection").addEventListener('click',()=>$("#training-selection-dialog").close());
+
+function showBrowserLockStatus(){
+  if(!browserSubject||browserSubject.status==="locked")return;
+  $("#live-cue").textContent=browserSubject.status==="select_subject"?"请点击画面中的患者框，确认训练者":browserSubject.status==="subject_lost_reconfirm"?"训练者已丢失，请重新点击患者框确认":"患者被遮挡或身份不确定，暂停计数，等待恢复";
+}
+async function selectBrowserSubject(x,y){
+  if(browserSelectionBusy)return;
+  browserSelectionBusy=true;browserLockEpoch++;LANDMARK_QUEUE.length=0;
+  const generation=cameraRequestGeneration,id=visionSessionId;
+  try{
+    // Drain the previous identity's in-flight batch before resetting server baselines.
+    while(uploadBusy){await new Promise(r=>setTimeout(r,30));if(generation!==cameraRequestGeneration)return}
+    await visionApi(`/${id}/subject`,{reset:true});
+    if(generation!==cameraRequestGeneration)return;
+    if(x===null)browserLock.reset();
+    else if(!browserLock.select(x,y,(performance.now()-captureStart)/1000))showToast("请点击单独的患者框，重叠时先分开再选");
+  }finally{browserSelectionBusy=false}
+}
