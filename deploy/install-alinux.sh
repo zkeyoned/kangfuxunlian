@@ -106,6 +106,13 @@ fi
 # index.html 里有一块「虚构演示账号」按钮，直接印着账号与初始密码，方便本机演示；
 # 但站点一旦公网可达，等于把可登录的凭证贴在首页上（其中包括管理员账号）。
 # 这里只改部署出来的副本，仓库源码保持原样，本机联调体验不变。
+#
+# 默认移除。团队内部联调、需要在登录页保留演示入口时，部署时设
+# REHAB_SHOW_DEMO_ACCOUNTS=1 跳过这一步。那一块只含患者与康复师的虚构演示账号，
+# 不含管理员；管理员账号的密码无论如何都必须在部署后轮换，不得沿用 seed.json 的初始值。
+if [ "${REHAB_SHOW_DEMO_ACCOUNTS:-0}" = "1" ]; then
+  echo "  REHAB_SHOW_DEMO_ACCOUNTS=1：保留登录页演示账号入口（不含管理员）"
+else
 "$PY" - <<'PYEOF'
 import re
 from pathlib import Path
@@ -127,6 +134,7 @@ if app.exists():
         app.write_text(cleaned, encoding="utf-8")
     print("  清除脚本内明文密码：%d 处" % n)
 PYEOF
+fi
 
 [ -d .venv ] || "$PY" -m venv .venv
 .venv/bin/pip install -q -i https://mirrors.aliyun.com/pypi/simple/ -r requirements.txt
