@@ -1,0 +1,20 @@
+const assert=require('node:assert/strict');const FrameEncoder=require('./frame-encoder.js');
+(async()=>{
+ const canvas={toBlob(cb,type,q){assert.equal(type,'image/jpeg');assert.equal(q,.85);cb('fallback')}};
+ assert.equal(await new FrameEncoder().encode(canvas),'fallback');
+ let instance,release;
+ global.OffscreenCanvas=class{};
+ global.createImageBitmap=()=>new Promise(r=>release=r);
+ global.Worker=class{constructor(){instance=this}postMessage({id}){this.id=id}terminate(){this.closed=true}};
+ const enc=new FrameEncoder(),first=enc.encode(canvas);
+ await assert.rejects(enc.encode(canvas),/already busy/);
+ release({close(){}});await new Promise(r=>setImmediate(r));
+ instance.onmessage({data:{id:instance.id+1,blob:'wrong'}});assert(enc.pending);
+ instance.onmessage({data:{id:instance.id,blob:'correct'}});assert.equal(await first,'correct');
+ global.createImageBitmap=async()=>({close(){}});
+ const failed=enc.encode(canvas);await new Promise(r=>setImmediate(r));instance.onerror();
+ await assert.rejects(failed,/后台/);assert(instance.closed);assert.equal(await enc.encode(canvas),'fallback');
+ global.Worker=class{constructor(){throw Error('blocked')}};
+ assert.equal(await new FrameEncoder().encode(canvas),'fallback');
+ console.log('PASS: single in-flight snapshot, matching response, worker failure and unsupported-browser fallback');
+})().catch(e=>{console.error(e);process.exit(1)});

@@ -554,7 +554,10 @@ function updateLiveResult(result,options){
   else if(activeExercise.id==="stand")values=[["膝关节夹角",fmt(m.knee_included_deg),"°"],["髋上升进度",Number.isFinite(m.hip_rise_progress)?fmt(m.hip_rise_progress*100):"--","%"],["本组完整次数",result.training_progress?.reps_in_set??0,`/ ${activeExercise.reps}`],["距站姿躯干基线",fmt(m.trunk_stand_delta_deg),"°"]];
   else if(activeExercise.id==="squat")values=[["膝屈曲",fmt(m.knee_flexion_deg),"°"],["髋下降 / 小腿长",fmt(m.hip_drop_shank_ratio,3),""],["本组次数",result.training_progress?.reps_in_set??0,`/ ${activeExercise.reps}`],["膝角速度",fmt(m.knee_velocity_deg_s),"°/秒"]];
   else values=[["膝关节夹角",fmt(m.knee_included_deg),"°"],["躯干变化",fmt(m.trunk_delta_deg),"°"],["本组次数",result.training_progress?.reps_in_set??0,`/ ${activeExercise.reps}`],["膝角速度",fmt(m.knee_velocity_deg_s),"°/秒"]];
-  $("#live-metrics").innerHTML=values.map(v=>`<div class="live-metric"><span>${v[0]}</span><b>${v[1]}</b><small>${v[2]}</small></div>`).join("");
+  const metrics=$("#live-metrics");
+  if(metrics.children?.length===values.length){
+    values.forEach((v,i)=>["span","b","small"].forEach((tag,j)=>{const node=metrics.children[i].querySelector(tag),text=String(v[j]);if(node.textContent!==text)node.textContent=text}));
+  }else metrics.innerHTML=values.map(v=>`<div class="live-metric"><span>${v[0]}</span><b>${v[1]}</b><small>${v[2]}</small></div>`).join("");
   (result.feedback_events||[]).forEach(event=>$("#cue-log").insertAdjacentHTML("afterbegin",`<li><time>${fmt(event.timestamp_s)}秒</time><p>${escapeHtml(event.message)}</p></li>`));
 }
 
@@ -700,20 +703,27 @@ function startLandmarksPipeline(){browserLock.reset();browserSubject=null;LANDMA
 
 function sendVisionFrame(){return VISION_MODE==="browser"?startLandmarksPipeline():VISION_MODE==="remote"?startRemoteFrames():sendCameraFrame()}
 
+let localEncoder=null;
 async function sendCameraFrame(){
   if(!trainingRunning||frameBusy)return;
   const video=$("#training-video");if(video.readyState<2){trainingTimer=setTimeout(sendCameraFrame,180);return}
   frameBusy=true;const generation=cameraRequestGeneration,id=visionSessionId,frameStart=performance.now();
   let retryDelay=0;
   try{
-    const maxWidth=960,scale=Math.min(1,maxWidth/video.videoWidth,maxWidth/video.videoHeight);captureCanvas.width=Math.round(video.videoWidth*scale);captureCanvas.height=Math.round(video.videoHeight*scale);
+    const maxWidth=960,scale=Math.min(1,maxWidth/video.videoWidth,maxWidth/video.videoHeight);const width=Math.round(video.videoWidth*scale),height=Math.round(video.videoHeight*scale);if(captureCanvas.width!==width)captureCanvas.width=width;if(captureCanvas.height!==height)captureCanvas.height=height;
     captureCanvas.getContext("2d").drawImage(video,0,0,captureCanvas.width,captureCanvas.height);
     const timestamp_s=(frameStart-captureStart)/1000;
-    const blob=await new Promise(resolve=>captureCanvas.toBlob(resolve,"image/jpeg",.85));
+    const encodeStart=performance.now();localEncoder ||= new FrameEncoder();
+    const blob=await localEncoder.encode(captureCanvas),encodeEnd=performance.now();
+    if(generation!==cameraRequestGeneration||!trainingRunning)return;
     if(!blob)throw new Error("画面编码失败");
     const response=await fetch(`${VISION_BASE}/${id}/frame`,{method:"POST",headers:visionHeaders({"Content-Type":"image/jpeg","X-Capture-Time":String(timestamp_s)}),body:blob,signal:AbortSignal.timeout(15000)});
     const result=await response.json();if(!response.ok){const error=new Error(result.error||"识别失败");error.status=response.status;throw error}
-    if(generation===cameraRequestGeneration&&trainingRunning){updateLiveResult(result);$(".camera-state").textContent=`${result.backend} · ${Math.round(performance.now()-frameStart)} ms/帧`;
+    if(generation===cameraRequestGeneration&&trainingRunning){const received=performance.now();updateLiveResult(result);
+      const sample={encode_ms:encodeEnd-encodeStart,request_ms:received-encodeEnd,server_ms:result.processing_ms,render_ms:performance.now()-received,total_ms:performance.now()-frameStart};
+      const samples=window.__posePerformance ||= [];samples.push(sample);if(samples.length>120)samples.shift();
+      $(".camera-state").title=`编码 ${Math.round(sample.encode_ms)} ms；请求 ${Math.round(sample.request_ms)} ms（含服务处理 ${sample.server_ms??"未知"} ms）；绘制 ${Math.round(sample.render_ms)} ms`;
+      $(".camera-state").textContent=`${result.backend} · ${Math.round(performance.now()-frameStart)} ms/帧`;
       if(result.training_progress?.status==="completed")await stopLiveTraining();
     }
   }catch(error){if(generation===cameraRequestGeneration&&trainingRunning&&error.status===404){expireVisionSession();return}retryDelay=500;if(generation===cameraRequestGeneration&&trainingRunning){$("#pose-overlay").getContext("2d").clearRect(0,0,$("#pose-overlay").width,$("#pose-overlay").height);$("#live-cue").textContent="识别暂时中断";$("#live-cue-detail").textContent=error.message}}
