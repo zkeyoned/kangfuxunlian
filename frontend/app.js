@@ -955,7 +955,7 @@ $("#view-last-report").addEventListener("click",()=>showTrainingReport(lastTrain
 $("#download-training-report").addEventListener("click",()=>{
   if(!lastTrainingReport)return;
   const blob=new Blob(["\ufeff"+reportDownloadText(lastTrainingReport)],{type:"text/plain;charset=utf-8"});
-  const url=URL.createObjectURL(blob),a=document.createElement("a");a.href=url;a.download=`康迹训练简报-${new Date().toISOString().slice(0,10)}.txt`;a.click();setTimeout(()=>URL.revokeObjectURL(url),1000);
+  const url=URL.createObjectURL(blob),a=document.createElement("a");a.href=url;a.download=`康师复训练简报-${new Date().toISOString().slice(0,10)}.txt`;a.click();setTimeout(()=>URL.revokeObjectURL(url),1000);
 });
 
 function pendingReportKey(uid){return `kangji_pending_reports_v1:${uid}`}
