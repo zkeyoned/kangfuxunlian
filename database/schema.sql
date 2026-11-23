@@ -1,4 +1,4 @@
--- 康迹 RehabTrack · 数据字典（SQLite 起步，字段与 PostgreSQL 兼容）
+-- 康师复 · 数据字典（SQLite 起步，字段与 PostgreSQL 兼容）
 -- 原则：只存关键点推导出的指标，不存视频、不存原始关键点（默认）。
 PRAGMA foreign_keys = ON;
 

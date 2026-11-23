@@ -1,4 +1,4 @@
-"""康迹 RehabTrack · 服务端（后端（常）：API / 数据库 / 权限 / 机构端 / 部署与日志）
+"""康师复 · 服务端（后端（常）：API / 数据库 / 权限 / 机构端 / 部署与日志）
 
 跑法：  python3 backend/main.py [端口]      默认 8801
 文档：  http://127.0.0.1:8801/docs          （FastAPI 自动生成）
@@ -54,7 +54,7 @@ _sh.setFormatter(_fmt)
 log.addHandler(_fh)
 log.addHandler(_sh)
 
-app = FastAPI(title="康迹 RehabTrack API", version=APP_VERSION, docs_url="/docs", redoc_url=None)
+app = FastAPI(title="康师复 RehabTrack API", version=APP_VERSION, docs_url="/docs", redoc_url=None)
 app.add_middleware(CORSMiddleware, allow_origins=["*"], allow_methods=["*"], allow_headers=["*"])
 
 
@@ -789,7 +789,7 @@ else:
     @app.get("/")
     def root():
         return {
-            "service": "康迹 RehabTrack API",
+            "service": "康师复 RehabTrack API",
             "version": APP_VERSION,
             "docs": "/docs",
             "note": "frontend/ 目录暂无可运行页面，接口详情见 /docs",

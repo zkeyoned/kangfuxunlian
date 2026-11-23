@@ -1,5 +1,5 @@
 #!/bin/bash
-# 康迹 RehabTrack：本机一键启动（后端 + 静态前端同一个端口）
+# 康师复：本机一键启动（后端 + 静态前端同一个端口）
 cd "$(dirname "$0")"
 PORT=8801
 DATA_DIR="${REHAB_DATA_DIR:-data}"
