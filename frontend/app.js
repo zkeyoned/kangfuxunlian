@@ -376,14 +376,6 @@ function renderSelectedSummary(){
   $("#selected-summary").innerHTML=selected.map((ex,i)=>`<span>0${i+1} · ${ex.name}</span>`).join("");
 }
 
-function timeGreeting(){
-  const hour=new Date().getHours();
-  if(hour<11)return "上午好";
-  if(hour<14)return "中午好";
-  if(hour<18)return "下午好";
-  return "晚上好";
-}
-
 function setRole(kind,role){
   const selector=kind==="login"?"[data-login-role]":"[data-register-role]";
   $$(selector).forEach(button=>{const active=button.dataset[kind+"Role"]===role;button.classList.toggle("active",active);button.setAttribute("aria-pressed",String(active))});
@@ -448,7 +440,8 @@ function enterApp(user){
   const therapist=user.role==="therapist";
   $("#patient-nav").classList.toggle("hidden",therapist); $("#therapist-nav").classList.toggle("hidden",!therapist);
   $("#profile-avatar").textContent=user.avatar; $("#profile-name").textContent=user.name; $("#profile-meta").textContent=user.meta;
-  $("#patient-greeting").textContent=`${timeGreeting()}，${user.name.slice(-2)}`;
+  $("#patient-greeting").textContent=`${user.name}的今日训练`;
+  {const d=new Date();$("#patient-date").textContent=`${d.getMonth()+1}月${d.getDate()}日 · 周${"日一二三四五六"[d.getDay()]}`;}
   $("#therapist-greeting").textContent=`${user.name[0]}老师，今天有 5 个动作需要复核`;
   $("#section-label").textContent=therapist?"康复师端":"患者端";
   gotoPage(therapist?"therapist-overview":"patient-home");
@@ -770,7 +763,15 @@ async function startLiveTraining(){
     const started=await visionApi("/start",{backend:VISION_MODE==="browser"?"browser":"rtmpose",required_reference:VISION_MODE==="remote"?RTM_REFERENCE:undefined,rule_version:activeExercise.id==="supine"?"slr_v0.1_surface":activeExercise.id==="stand"?"sts_v0.1_dual_baseline":activeExercise.id==="squat"?"squat_v0.1_joint":null,exercise:EXERCISE_TO_VISION[activeExercise.id],side:$("#training-side").value,sets:activeExercise.groups,reps:activeExercise.reps,targets:activeExercise.targets||defaultTargets(activeExercise.id)});
     if(requestGeneration!==cameraRequestGeneration){await visionApi(`/${started.session_id}/stop`,{});return}
     trainingOwner={userId:currentUser.id,exerciseId:activeExercise.id,clientId:started.session_id};captureStart=performance.now();visionSessionId=started.session_id;trainingRunning=true;startTrainingVideo(trainingOwner);$(".camera-stage").classList.add("live");$(".camera-state").innerHTML="<i></i>视觉算法已连接";button.disabled=false;button.textContent="结束本次训练";sendVisionFrame();
-  }catch(error){cameraStream?.getTracks().forEach(track=>track.stop());cameraStream=null;button.disabled=false;button.textContent="重新允许摄像头";$("#live-cue").textContent="无法开始识别";$("#live-cue-detail").textContent=error.message}
+  }catch(error){cameraStream?.getTracks().forEach(track=>track.stop());cameraStream=null;button.disabled=false;button.textContent="重新允许摄像头";$("#live-cue").textContent="无法开始识别";$("#live-cue-detail").textContent=cameraErrorText(error)}
+}
+
+function cameraErrorText(error){
+  const name=error?.name||"";
+  if(name==="NotAllowedError"||/permission/i.test(error?.message||""))return "摄像头权限被拒绝。请在浏览器地址栏左侧允许使用摄像头，再点「重新允许摄像头」";
+  if(name==="NotFoundError")return "没有找到摄像头，请接好摄像头后重试";
+  if(name==="NotReadableError")return "摄像头正被其他程序占用，关掉后重试";
+  return error?.message||"摄像头启动失败，请重试";
 }
 
 async function stopLiveTraining(){
