@@ -1,0 +1,113 @@
+name: desktop-build
+
+# 只手动触发或打标签时触发。私有仓库的 Actions 分钟数有限，
+# Windows 按 2 倍计费，macOS 按 10 倍，不配 push 自动触发。
+on:
+  workflow_dispatch:
+    inputs:
+      run-windows:
+        description: "构建 Windows 包"
+        type: boolean
+        default: true
+      run-macos:
+        description: "构建 macOS 包（Apple 芯片，按 10 倍计费，默认关）"
+        type: boolean
+        default: false
+  push:
+    tags:
+      - "desktop-v*"
+
+permissions:
+  contents: read
+
+jobs:
+  windows:
+    # 打标签时默认只出 Windows 包，手动触发时按输入决定。
+    if: >-
+      github.event_name == 'push' ||
+      github.event.inputs.run-windows == 'true'
+    runs-on: windows-latest
+    timeout-minutes: 45
+    steps:
+      - uses: actions/checkout@v4
+
+      - name: 安装 Python 3.12
+        uses: actions/setup-python@v5
+        with:
+          python-version: "3.12"
+
+      - name: 构建
+        shell: pwsh
+        env:
+          REHAB_BUILD_PYTHON: python
+          REHAB_BUILD_VENV: ${{ github.workspace }}\.buildvenv
+          REHAB_BUILD_OUT: ${{ github.workspace }}\.buildout
+        run: powershell -ExecutionPolicy Bypass -File desktop\build\build-windows.ps1
+
+      - name: 写入云端地址配置
+        shell: pwsh
+        env:
+          CLOUD_BASE: ${{ secrets.REHAB_CLOUD_BASE }}
+        run: |
+          $base = $env:CLOUD_BASE
+          if ([string]::IsNullOrWhiteSpace($base)) {
+            $base = "https://replace-me.invalid"
+            Write-Host "::notice::仓库没有配置 REHAB_CLOUD_BASE，用占位地址构建。装好之后请按 desktop/README.md 改 config.json。"
+          }
+          $target = Join-Path $env:GITHUB_WORKSPACE ".buildout\dist\KangShiFu\config.json"
+          @{ apiBase = ($base.TrimEnd('/') + "/api/v1") } | ConvertTo-Json | Set-Content -Path $target -Encoding UTF8
+
+      - name: 自检
+        shell: pwsh
+        run: |
+          & "$env:GITHUB_WORKSPACE\.buildout\dist\KangShiFu\KangShiFu.exe" --selftest
+          if ($LASTEXITCODE -ne 0) { throw "自检未通过" }
+
+      - name: 上传产物
+        uses: actions/upload-artifact@v4
+        with:
+          name: kangshifu-windows-x64
+          path: .buildout/dist/KangShiFu
+          retention-days: 14
+
+  macos:
+    # 默认不跑。macOS runner 按 10 倍计费，本机已经能构建，只在确实需要时手动开。
+    if: github.event.inputs.run-macos == 'true'
+    runs-on: macos-14
+    timeout-minutes: 45
+    steps:
+      - uses: actions/checkout@v4
+
+      - name: 安装 Python 3.12
+        uses: actions/setup-python@v5
+        with:
+          python-version: "3.12"
+
+      - name: 构建
+        env:
+          REHAB_BUILD_PYTHON: python3
+          REHAB_BUILD_VENV: ${{ github.workspace }}/.buildvenv
+          REHAB_BUILD_OUT: ${{ github.workspace }}/.buildout
+        run: bash desktop/build/build-macos.sh
+
+      - name: 写入云端地址配置
+        env:
+          CLOUD_BASE: ${{ secrets.REHAB_CLOUD_BASE }}
+        run: |
+          BASE="$CLOUD_BASE"
+          if [ -z "$BASE" ]; then
+            BASE="https://replace-me.invalid"
+            echo "::notice::仓库没有配置 REHAB_CLOUD_BASE，用占位地址构建。装好之后请按 desktop/README.md 改 config.json。"
+          fi
+          printf '{"apiBase": "%s/api/v1"}\n' "${BASE%/}" > "$GITHUB_WORKSPACE/.buildout/dist/config.json"
+
+      - name: 自检
+        run: |
+          "$GITHUB_WORKSPACE/.buildout/dist/康师复.app/Contents/MacOS/KangShiFu" --selftest
+
+      - name: 上传产物
+        uses: actions/upload-artifact@v4
+        with:
+          name: kangshifu-macos-arm64
+          path: .buildout/dist
+          retention-days: 14

@@ -108,7 +108,10 @@ async function syncVisualPlan(){
 
 const $ = selector => document.querySelector(selector);
 const $$ = selector => [...document.querySelectorAll(selector)];
-const API_BASE = "http://127.0.0.1:8801/api/v1";
+// 桌面安装包会在同目录生成 config.js，把 apiBase 指向云端后端。
+// 没有 config.js 时取值与改动前完全一致，本地联调与线上部署都不受影响。
+const API_BASE = (typeof window !== "undefined" && window.REHAB_CONFIG && window.REHAB_CONFIG.apiBase)
+  || "http://127.0.0.1:8801/api/v1";
 // 视觉链路有两种跑法，按访问来源自动选，也可用 ?vision=local|browser 手动覆盖：
 //   local   —— 识别跑在用户自己电脑上的 Python 服务（8802），画面以 JPEG 上传。
 //              需要先在本机装好并启动视觉服务，Safari 与手机用不了。
