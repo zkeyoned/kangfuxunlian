@@ -606,10 +606,10 @@ function detectLandmarks(bitmap,width,height,timestamp_s){
 const browserLock=new BrowserSubjectLock();
 let browserSubject=null,browserSelectionBusy=false,browserLastTime=0,browserLockEpoch=0;
 const POSE_LINES=[[11,23],[23,25],[25,27],[12,24],[24,26],[26,28],[11,12],[23,24]];
-function drawLocalSkeleton(landmarks,width,height){
+function drawLocalSkeleton(landmarks,width,height,append=false){
   const canvas=$("#pose-overlay"),context=canvas.getContext("2d");
   if(canvas.width!==width||canvas.height!==height){canvas.width=width;canvas.height=height}
-  context.clearRect(0,0,canvas.width,canvas.height);
+  if(!append)context.clearRect(0,0,canvas.width,canvas.height);
   if(!landmarks)return;
   const visible=point=>point&&Math.min(point.visibility,point.presence)>=.5;
   context.lineWidth=Math.max(2,width/240);context.strokeStyle="rgba(46,160,120,.9)";
@@ -654,7 +654,14 @@ async function captureLandmarksLoop(){
     browserSubject={...tracked.subject,boxes:tracked.subject.boxes.map(b=>[b[0]*width,b[1]*height,b[2]*width,b[3]*height])};
     detected.landmarks=tracked.landmarks;detected.pose_status=tracked.pose_status;
     if(generation!==cameraRequestGeneration||!trainingRunning)return;
+    // Show detected bodies before selection, without sending an unconfirmed
+    // person's landmarks to the rule engine. Counting still requires a lock.
     drawLocalSkeleton(detected.landmarks,width,height);
+    if(browserSubject.status==="select_subject"||browserSubject.status==="subject_lost_reconfirm"){
+      for(const candidate of browserLock.candidates){
+        drawLocalSkeleton(candidate.landmarks,width,height,true);
+      }
+    }
     lastVisionResult={...(lastVisionResult||{}),subject:browserSubject};
     const ctx=$("#pose-overlay").getContext("2d");
     if(browserSubject.status!=="locked"){ctx.strokeStyle="#f2a65a";ctx.lineWidth=2;for(const b of browserSubject.boxes)ctx.strokeRect(previewFlipped?width-b[2]:b[0],b[1],b[2]-b[0],b[3]-b[1]);}
