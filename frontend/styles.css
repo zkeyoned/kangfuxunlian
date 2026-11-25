@@ -353,6 +353,8 @@ input:focus,select:focus,textarea:focus{outline:0;border-color:var(--brand);box-
 .login-intro h1{margin:12px 0 16px;font-size:clamp(34px,3.6vw,48px);font-weight:600;line-height:1.2}
 .login-intro>p:last-child{color:var(--muted);font-size:17px}
 .login-trust{display:flex;flex-wrap:wrap;gap:8px}
+.intro-link{display:inline-flex;align-items:center;margin-top:20px;height:40px;padding:0 18px;border-radius:20px;background:var(--bg);color:var(--brand);font-size:15px;font-weight:600;box-shadow:0 0 0 1px var(--line) inset}
+.intro-link:hover{background:var(--brand-soft)}
 .login-trust>*{padding:6px 12px;border-radius:16px;background:var(--bg);color:var(--ink-2);font-size:13px;font-weight:500}
 .login-form-panel{display:grid;place-items:center;min-height:100dvh;padding:48px clamp(24px,6vw,96px)}
 .login-form{width:min(100%,420px)}
