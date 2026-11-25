@@ -59,7 +59,7 @@ PYEOF
     echo "旧库升级完成。原库备份在 $DATA_DIR/rehabtrack.sqlite3.bak-$STAMP"
   fi
 fi
-# --exclude .venv 必须有：虚拟环境建在 $APP_DIR/.venv，而源目录没有它，
+# --exclude .venv --exclude .vision-venv --exclude models 必须有：虚拟环境建在 $APP_DIR/.venv，而源目录没有它，
 # 少了这条 --delete 会在第二次部署时删掉正在用的 venv，且删不干净（目录非空），
 # 下一行的 .venv/bin/pip 随即 No such file or directory，重装必然中断。
 # .vision-venv 与 models 同理：服务端 RTMPose 的推理环境和模型权重只存在于服务器上，
@@ -90,7 +90,7 @@ fi
 # 这里只改部署出来的副本，仓库源码保持干净。
 STAMP=$(date +%Y%m%d%H%M%S)
 if [ -f frontend/index.html ]; then
-  sed -i "s#src=\"app.js\"#src=\"app.js?v=$STAMP\"#g" frontend/index.html
+  sed -E -i "s#src=\"(app|frame-queue|subject-lock)\.js(\?[^\"]*)?\"#src=\"\1.js?v=$STAMP\"#g" frontend/index.html
   sed -i "s#href=\"styles.css\"#href=\"styles.css?v=$STAMP\"#g" frontend/index.html
   # 其它同页脚本（如 subject-lock.js）可能自带固定版本号，一并换成本次部署的戳，
   # 否则它们更新后访客仍会命中旧缓存。

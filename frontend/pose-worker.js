@@ -31,8 +31,8 @@ async function init() {
       delegate: "CPU",
     },
     runningMode: "VIDEO",
-    // 认到第二个人就够判断"画面里不止一个人"，规则层据此暂停计数。
-    numPoses: 2,
+    // 最多四个候选，身份由浏览器锁定器确定，不取输出顺序。
+    numPoses: 4,
   });
 }
 
@@ -68,21 +68,27 @@ self.onmessage = async (event) => {
       lastTimestampMs = stamp;
       const output = landmarker.detectForVideo(bitmap, stamp);
       const poses = output.landmarks || [];
-      const first = poses[0] || [];
-      // 规则层要求恰好 33 个点，缺就整帧作废，不要送半截数据。
-      const landmarks = first.length === 33 ? first.map((p) => ({
-        x: p.x,
-        y: p.y,
-        // JS 版 NormalizedLandmark 没有 presence；规则层用 min(visibility, presence)
-        // 做阈值，这里补齐成同一个值，保持与服务端一致的判定语义。
-        visibility: typeof p.visibility === "number" ? p.visibility : 0,
-        presence: typeof p.visibility === "number" ? p.visibility : 0,
-      })) : null;
+      const canvas=new OffscreenCanvas(160,120),ctx=canvas.getContext("2d",{willReadFrequently:true});
+      ctx.drawImage(bitmap,0,0,160,120);
+      const pixels=ctx.getImageData(0,0,160,120).data;
+      const candidates=poses.filter(p=>p.length===33).map(pose=>{
+        const landmarks=pose.map(p=>({x:p.x,y:p.y,visibility:p.visibility||0,presence:p.visibility||0}));
+        const hist=new Array(64).fill(0);let count=0;
+        // Sample an inset shoulder/hip quadrilateral, avoiding background at its edges.
+        const [ls,rs,lh,rh]=[11,12,23,24].map(i=>pose[i]);
+        for(let v=.2;v<=.8;v+=.1)for(let u=.2;u<=.8;u+=.1){
+          const x=(1-v)*((1-u)*ls.x+u*rs.x)+v*((1-u)*lh.x+u*rh.x);
+          const y=(1-v)*((1-u)*ls.y+u*rs.y)+v*((1-u)*lh.y+u*rh.y);
+          if(x<0||y<0||x>=1||y>=1)continue;
+          const i=(Math.floor(y*120)*160+Math.floor(x*160))*4;
+          hist[(pixels[i]>>6)*16+(pixels[i+1]>>6)*4+(pixels[i+2]>>6)]++;count++;
+        }
+        return {landmarks,appearance:count?hist.map(x=>x/count):null};
+      });
       self.postMessage({
         type: "result",
         id: msg.id,
-        landmarks,
-        pose_status: landmarks ? toPoseStatus(poses.length) : "no_person",
+        candidates,
         width: msg.width,
         height: msg.height,
         timestamp_s: msg.timestamp_s,
