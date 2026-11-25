@@ -606,7 +606,8 @@ class Handler(BaseHTTPRequestHandler):
                     if len(SESSIONS) >= MAX_SESSIONS:
                         return self._json(429, {"error": "当前训练人数已满，请稍后再试"})
                 body = self._body()
-                if body.get("required_reference") or REMOTE_RTMPOSE:
+                # 浏览器识别只上传关键点、服务端不加载任何模型，不受「服务器只跑 RTMPose」开关约束。
+                if body.get("backend") != "browser" and (body.get("required_reference") or REMOTE_RTMPOSE):
                     profile = reference_status()
                     if not profile["ready"] or body.get("required_reference") != profile["reference_id"] or body.get("backend") != "rtmpose":
                         return self._json(503, {"error":"服务器尚未准备好与本地一致的RTMPose模型及规则，请联系管理员部署；不会自动切换模型"})
