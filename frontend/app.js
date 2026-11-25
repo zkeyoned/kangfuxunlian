@@ -1,6 +1,6 @@
 const exercises = [
   {
-    id: "seated", name: "坐姿直腿抬高", short: "坐姿伸膝", image: "assets/seated-knee-extension-v2.jpg", dose: "2 组 × 10 次", done: false,
+    id: "seated", name: "坐姿伸膝", short: "坐姿伸膝", image: "assets/seated-knee-extension-v2.jpg", dose: "2 组 × 10 次", done: false,
     flow: "坐稳 → 缓慢伸直患侧膝关节 → 保持 → 缓慢放下",
     focus: ["完成次数", "最大伸膝角度", "顶点保持", "抬起与下放速度"],
     hero: ["还差 7° 完全伸直", "第 8 次动作在顶点停留不足，下一次伸直后多保持 1.6 秒。"],
@@ -146,7 +146,7 @@ async function api(path, options={}){
 
 function apiUser(user){
   const therapist=user.role==="therapist";
-  return {...user,name:user.display_name,avatar:(user.display_name||user.username||"用")[0],meta:therapist?"康复治疗师 · 本机数据库":"患者 · 本机数据库"};
+  return {...user,name:user.display_name,avatar:(user.display_name||user.username||"用")[0],meta:therapist?"康复治疗师":"患者"};
 }
 
 async function syncPatientData(){
@@ -182,8 +182,8 @@ const demoUsers = [
   {key:"linyuqing",name:"林雨晴",account:"p.linyuqing",password:"linyu123",role:"patient"},
   {key:"zhouqiming",name:"周启明",account:"p.zhouqiming",password:"zhou123",role:"patient"},
   {key:"wu",name:"吴女士",account:"p.wu",password:"wu123",role:"patient"},
-  {key:"patient",name:"张先生",account:"p.zhang",password:"zhang123",role:"patient",avatar:"张",meta:"患者 · 本机数据库"},
-  {key:"therapist",name:"林康复师",account:"dr.lin",password:"lin123",role:"therapist",avatar:"林",meta:"康复治疗师 · 本机数据库"}
+  {key:"patient",name:"张先生",account:"p.zhang",password:"zhang123",role:"patient",avatar:"张",meta:"患者"},
+  {key:"therapist",name:"林康复师",account:"dr.lin",password:"lin123",role:"therapist",avatar:"林",meta:"康复治疗师"}
 ];
 // Retire the old mock accounts, which stored passwords only in this browser.
 try{localStorage.removeItem("kangshifu_registered_users")}catch(error){}
@@ -258,7 +258,8 @@ function updateDurationEstimates(){
 }
 
 function renderExercises(){
-  $("#exercise-list").innerHTML = availableExercises().map((ex,i) => `<article class="exercise-row ${ex.done ? "done" : ""}"><span class="exercise-index">0${i+1}</span><div class="exercise-thumb"><img src="${ex.image}" alt="${ex.name}示范"></div><div class="exercise-info"><h4>${ex.name}</h4><p>${ex.flow}</p><div class="exercise-meta"><span>当前 ${ex.groups} 组 × ${ex.reps} 次</span><span data-duration="${ex.id}"></span></div></div><div class="exercise-config"><div class="dose-editor"><b>自主训练量</b><label>组数<input type="number" min="1" max="20" step="1" value="${ex.groups}" data-dose-field="groups" data-exercise-id="${ex.id}" aria-label="${ex.name}训练组数"></label><label>每组次数<input type="number" min="1" max="100" step="1" value="${ex.reps}" data-dose-field="reps" data-exercise-id="${ex.id}" aria-label="${ex.name}每组次数"></label><small>${patientTrainingSource==="prescribed"?"康复师建议":patientTrainingSource==="demo"?"演示设置":"自主设置（待康复师确认）"}：${ex.dose}</small></div></div><div class="exercise-action"><button class="${ex.done ? "secondary-button" : "primary-button"}" data-train="${ex.id}">${ex.done ? "再次训练" : "开始训练"}</button>${ex.done ? "<small>今日已完成</small>" : ""}</div></article>`).join("");
+  const nextIndex=availableExercises().findIndex(ex=>!ex.done);
+  $("#exercise-list").innerHTML = availableExercises().map((ex,i) => `<article class="exercise-card ${ex.done ? "done" : ""}"><button class="exercise-thumb" type="button" data-train="${ex.id}" aria-label="开始训练：${ex.name}"><img src="${ex.image}" alt="${ex.name}示范"><span class="thumb-badge ${!ex.done&&i===nextIndex?"next":""}">${ex.done?"今日已完成":i===nextIndex?"下一个":""}</span><span class="thumb-duration" data-duration="${ex.id}"></span>${ex.done?'<i class="thumb-progress"></i>':""}</button><div class="exercise-body"><span class="exercise-index">0${i+1}</span><div class="exercise-info"><h4>${ex.name}</h4><p class="exercise-meta"><span>${ex.groups} 组 × ${ex.reps} 次</span></p><p class="exercise-flow">${ex.flow}</p></div></div><div class="exercise-action"><button class="${ex.done ? "secondary-button" : "primary-button"}" data-train="${ex.id}">${ex.done ? "再练一次" : "开始训练"}</button><details class="exercise-config"><summary>调整训练量</summary><div class="dose-editor"><b>自主训练量</b><label>组数<input type="number" min="1" max="20" step="1" value="${ex.groups}" data-dose-field="groups" data-exercise-id="${ex.id}" aria-label="${ex.name}训练组数"></label><label>每组次数<input type="number" min="1" max="100" step="1" value="${ex.reps}" data-dose-field="reps" data-exercise-id="${ex.id}" aria-label="${ex.name}每组次数"></label><small>${patientTrainingSource==="prescribed"?"康复师建议":patientTrainingSource==="demo"?"演示设置":"自主设置（待康复师确认）"}：${ex.dose}</small></div></details></div></article>`).join("");
   $("#patient-plan-rows").innerHTML = availableExercises().map((ex,i)=>`<div class="plain-row"><span>0${i+1}</span><b>${ex.name}</b><p>${ex.dose} · ${estimateMinutes(estimateExerciseSeconds(ex,ex.recommendedGroups,ex.recommendedReps))}</p><p>${escapeHtml(targetDescription(ex))}</p></div>`).join("");
   if(!availableExercises().length){
     const empty='<div class="content-section"><h3>还没有训练方案</h3><p>可以先关联康复师，或自主添加膝骨关节炎训练方向与动作。自主选择不代表诊断。</p><button class="primary-button" data-add-selection>添加病症与动作</button> <button class="secondary-button" data-goto="care-connections">关联康复师</button></div>';
@@ -343,7 +344,7 @@ function renderFeedback(index=feedbackSelection){
   $("#feedback-sets").innerHTML="";$("#feedback-events").innerHTML="";
   if(!brief){
     $("#feedback-status").textContent="暂无记录";$("#feedback-source").textContent="尚无本账号的训练结果";
-    $("#feedback-hero").innerHTML="<strong>完成一次训练后查看真实反馈</strong><p>开始识别并结束训练后，这里会显示本次测量值、分组总结和调整提示。尚未接入的历史录像不会自动补入。</p>";
+    $("#feedback-hero").innerHTML="<strong>完成一次训练后查看真实反馈</strong><p>开始识别并结束训练后，这里会显示本次测量值、分组总结和调整提示。</p><button class='primary-button' data-goto='patient-home'>去今日训练</button>";
     $("#feedback-metrics").innerHTML="";$("#therapist-note").textContent="暂无基于实际动作的建议。";return;
   }
   const problems=brief.sets.some(g=>g.problems?.length),review=brief.interrupted_attempts||brief.sets.some(g=>g.needs_review_reps);
@@ -438,7 +439,7 @@ function enterApp(user){
   loadFeedbackReports(user.id);
   $("#login-screen").classList.add("hidden"); $("#register-screen").classList.add("hidden"); $("#app-shell").classList.remove("hidden");
   const therapist=user.role==="therapist";
-  $("#patient-nav").classList.toggle("hidden",therapist); $("#therapist-nav").classList.toggle("hidden",!therapist);
+  $("#patient-nav").classList.toggle("hidden",therapist); $("#therapist-nav").classList.toggle("hidden",!therapist); $("#patient-tabbar").classList.toggle("hidden",therapist);
   $("#profile-avatar").textContent=user.avatar; $("#profile-name").textContent=user.name; $("#profile-meta").textContent=user.meta;
   $("#patient-greeting").textContent=`${user.name}的今日训练`;
   {const d=new Date();$("#patient-date").textContent=`${d.getMonth()+1}月${d.getDate()}日 · 周${"日一二三四五六"[d.getDay()]}`;}
@@ -906,7 +907,7 @@ $("#login-form").addEventListener("submit",async event=>{
     apiToken=result.token;sessionStorage.setItem("kangshifu_api_token",apiToken);
     $("#login-error").textContent="";$("#login-password").value="";enterApp(apiUser(result.user));
     try{await syncBackendData();showToast("登录成功，已连接数据库")}catch(error){showToast(`已登录，工作台数据暂未加载：${error.message}`)}
-  }catch(error){if(error.code==="PASSWORD_RESET_REQUIRED")openPasswordReset(account);apiToken="";sessionStorage.removeItem("kangshifu_api_token");$("#login-error").textContent=error instanceof TypeError?"无法连接账号服务，请检查服务是否启动或网络连接。":error.status===401?"账号或密码不正确。旧版仅在浏览器保存的账号，请先重新注册。":error.message}
+  }catch(error){if(error.code==="PASSWORD_RESET_REQUIRED")openPasswordReset(account);apiToken="";sessionStorage.removeItem("kangshifu_api_token");$("#login-error").textContent=error instanceof TypeError?"暂时连不上服务器，请检查网络后重试。":error.status===401?"账号或密码不正确。旧版仅在浏览器保存的账号，请先重新注册。":error.message}
   finally{button.disabled=false}
 });
 
@@ -923,7 +924,7 @@ $("#register-form").addEventListener("submit",async event=>{
   try{
     const result=await api("/auth/register",{method:"POST",auth:false,body:{username:identifier,password,display_name:name,role:selectedRegisterRole}});
     $("#register-error").textContent="";$("#register-form").reset();setRole("register","patient");setRole("login",result.role);showAuthScreen("login");$("#login-account").value=result.username;$("#login-password").value="";$("#login-error").textContent="注册成功，请输入密码登录。";showToast("账号已保存到数据库");
-  }catch(error){$("#register-error").textContent=error instanceof TypeError?"无法连接账号服务，请检查服务是否启动或网络连接。":error.message}
+  }catch(error){$("#register-error").textContent=error instanceof TypeError?"暂时连不上服务器，请检查网络后重试。":error.message}
   finally{button.disabled=false}
 });
 
@@ -940,7 +941,7 @@ document.addEventListener("input",event=>{
   const doseField=event.target.closest("[data-dose-field]");if(!doseField||doseField.value==="")return;
   const ex=exercises.find(item=>item.id===doseField.dataset.exerciseId);if(!ex)return;
   const limit=doseField.dataset.doseField==="groups"?20:100;ex[doseField.dataset.doseField]=Math.max(1,Math.min(limit,Math.round(Number(doseField.value)||1)));
-  const summary=doseField.closest(".exercise-row")?.querySelector(".exercise-meta span");if(summary)summary.textContent=`当前 ${ex.groups} 组 × ${ex.reps} 次`;ex.done=false;saveDosePreferences();updateDurationEstimates();
+  const summary=doseField.closest(".exercise-card")?.querySelector(".exercise-meta span");if(summary)summary.textContent=`${ex.groups} 组 × ${ex.reps} 次`;ex.done=false;saveDosePreferences();updateDurationEstimates();
 });
 document.addEventListener("change",event=>{
   const doseField=event.target.closest("[data-dose-field]");
@@ -1053,8 +1054,8 @@ async function loadServerReports(){
   try{
     const selectedPatient=isPatient?null:reportPatientFilter;
     const data=await api("/training-reports"+(selectedPatient?`?patient_id=${selectedPatient.id}`:""));if(currentUser?.id!==uid||(!isPatient&&selectedPatient!==reportPatientFilter))return;
-    $("#"+target+"-report-status").textContent=`${selectedPatient?selectedPatient.name+" · ":""}已加载最近50份训练报告`;
-    $("#"+target+"-report-list").innerHTML=data.reports.length?data.reports.map(row=>`<section class="report-set"><h3>${escapeHtml(row.patient_name)} · ${escapeHtml(row.brief_report.exercise)}</h3><p>${escapeHtml(row.created_at)} · ${escapeHtml(row.brief_report.side)} · 识别 ${row.brief_report.completed_reps}/${row.brief_report.target_reps} 次</p><p>${escapeHtml(isPatient?(row.delivery.status==="available"?(row.read_at?"康复师已查看":"已同步给关联康复师，尚未查看"):"已保存，尚未关联康复师"):(row.read_at?"已查看":"未查看"))}</p><button class="secondary-button" data-open-report="${row.id}">查看报告</button> ${videoReportButton(row)}</section>`).join(""):"<p>暂无已保存的训练报告。</p>";
+    $("#"+target+"-report-status").textContent=data.reports.length?`${selectedPatient?selectedPatient.name+" · ":""}共 ${data.reports.length} 份训练报告${data.reports.length>=50?"（显示最近 50 份）":""}`:"";
+    $("#"+target+"-report-list").innerHTML=data.reports.length?data.reports.map(row=>`<section class="report-set"><h3>${escapeHtml(row.patient_name)} · ${escapeHtml(row.brief_report.exercise)}</h3><p>${escapeHtml(row.created_at)} · ${escapeHtml(row.brief_report.side)} · 识别 ${row.brief_report.completed_reps}/${row.brief_report.target_reps} 次</p><p>${escapeHtml(isPatient?(row.delivery.status==="available"?(row.read_at?"康复师已查看":"已同步给关联康复师，尚未查看"):"已保存，尚未关联康复师"):(row.read_at?"已查看":"未查看"))}</p><button class="secondary-button" data-open-report="${row.id}">查看报告</button> ${videoReportButton(row)}</section>`).join(""):(isPatient?"<div class='report-empty'><p>还没有训练报告。练完一次，报告会自动出现在这里。</p><button class='primary-button' data-goto='patient-home'>去今日训练</button></div>":"<div class='report-empty'><p>关联的患者还没有训练报告。</p></div>");
     if(!isPatient){if(!selectedPatient)$("#report-unread-count").textContent=data.reports.filter(r=>!r.read_at).length||"";return}
     const pending=pendingReports(uid);
     for(const [id,result] of Object.entries(pending)){
