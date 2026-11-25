@@ -91,7 +91,7 @@ function collectVisualPlan(status){
 async function persistVisualPlan(status){
  const pid=$("#plan-patient").value;if(!pid){showToast("请先关联并选择患者");return}
  try{const body=collectVisualPlan(status);$("#publish-plan").disabled=$("#save-draft").disabled=true;
- const saved=await api(`/patients/${pid}/visual-prescription`,{method:"POST",body});$("#save-state").textContent=status==="draft"?"草稿已保存，患者不可见":`已发布版本 ${saved.id}`;showToast(status==="draft"?"草稿已存入数据库":"已发布，患者空闲页面将在15秒内同步，下次训练生效");
+ const saved=await api(`/patients/${pid}/visual-prescription`,{method:"POST",body});$("#save-state").textContent=status==="draft"?"草稿已保存，患者不可见":`已发布版本 ${saved.id}`;showToast(status==="draft"?"草稿已保存":"已发布，患者空闲页面将在15秒内同步，下次训练生效");
  }catch(e){showToast(e.message);$("#save-state").textContent="保存失败，未发布"}finally{$("#publish-plan").disabled=$("#save-draft").disabled=false}
 }
 async function syncVisualPlan(){
@@ -253,7 +253,7 @@ function updateDurationEstimates(){
   $("#today-remaining").textContent=!availableExercises().length?"添加动作后显示预计时间":remaining?`未完成项目预计还需${estimateMinutes(remaining)}`:"今日训练已完成";
   $("#completed-count").textContent=availableExercises().filter(ex=>ex.done).length;
   $("#exercise-total").textContent=availableExercises().length;
-  $("#training-list-title").textContent=availableExercises().length?`${availableExercises().length}项训练`:"尚未添加训练动作";
+  $("#training-list-title").textContent=availableExercises().length?`今天的训练 · ${availableExercises().length} 个动作`:"尚未添加训练动作";
   $("#today-progress").style.width=`${availableExercises().filter(ex=>ex.done).length/Math.max(1,availableExercises().length)*100}%`;
 }
 
@@ -350,7 +350,7 @@ function renderFeedback(index=feedbackSelection){
   const problems=brief.sets.some(g=>g.problems?.length),review=brief.interrupted_attempts||brief.sets.some(g=>g.needs_review_reps);
   $("#feedback-status").textContent=!brief.completed_reps?"未识别完整动作":problems?"有待调整项":review?"部分数据需复核":"已生成反馈";
   $("#feedback-status").className=`status ${problems||review?"warn":"neutral"}`;
-  $("#feedback-source").textContent=`最近一次训练 · ${new Date(record.savedAt).toLocaleString("zh-CN")} · ${brief.side} · ${record.serverId?"已保存到账号":"本机反馈，等待保存到账号"}`;
+  $("#feedback-source").textContent=`最近一次训练 · ${new Date(record.savedAt).toLocaleString("zh-CN")} · ${brief.side} · ${record.serverId?"已保存到账号":"本次结果还没保存到账号"}`;
   $("#feedback-hero").innerHTML=`<strong>识别完成 ${brief.completed_reps} / 计划 ${brief.target_reps} 次</strong><p>${escapeHtml(brief.scope)}</p>`;
   $("#feedback-metrics").innerHTML=record.metrics.map(m=>`<div class="metric-row"><span>${escapeHtml(m[0])}</span><b>${escapeHtml(m[1])}</b><small>${escapeHtml(m[2])}</small><span class="metric-result neutral">实际记录</span></div>`).join("");
   $("#feedback-sets").innerHTML=brief.sets.map(g=>`<section class="report-set"><h3>第 ${g.set} 组 · ${escapeHtml(g.status)}</h3><p>识别 ${g.completed_reps} / ${g.target_reps} 次，${g.angle_hold_met_reps} 次${ex.id==="squat"?"完成本次微蹲目标":"达到角度与保持目标"}。</p><p>${escapeHtml(g.finding)}</p>${g.needs_review_reps?`<p>${g.needs_review_reps} 次需复核，缺失测量未当成正常。</p>`:""}</section>`).join("");
@@ -461,7 +461,7 @@ function gotoPage(page){
 function openTraining(id){
   const ex=availableExercises().find(x=>x.id===id); if(!ex)return; activeExercise=ex;
   const i=exercises.indexOf(ex); $("#training-kicker").textContent=`动作 0${i+1}`; $("#training-title").textContent=ex.name; $("#training-image").src=ex.image;
-  $("#phase-name").textContent="准备"; $("#live-cue").textContent="请调整位置并保持训练侧髋、膝、踝入镜"; $("#live-cue-detail").textContent=ex.flow;
+  $(".camera-state").innerHTML="<i></i>摄像头未开启"; $("#phase-name").textContent="准备"; $("#live-cue").textContent="请调整位置并保持训练侧髋、膝、踝入镜"; $("#live-cue-detail").textContent=ex.flow;
   $("#live-metrics").innerHTML=ex.live.map(m=>`<div class="live-metric"><span>${m[0]}</span><b>--</b><small>${m[0]==="本组次数"?`/ ${ex.reps}`:m[2]}</small></div>`).join("");
   $("#cue-log").innerHTML=`<li><time>准备</time><p>${ex.note}</p></li>`; $("#start-training").textContent="允许摄像头并开始识别"; $("#start-training").disabled=false; clearTimeout(trainingTimer);
   $("#training-screen").classList.add("active"); $("#training-screen").setAttribute("aria-hidden","false"); document.body.classList.add("training-open");
@@ -483,7 +483,7 @@ async function visionApi(path,body){
 async function rawVisionApi(path,body){
   const response=await fetch(`${VISION_BASE}${path}`,{method:"POST",headers:visionHeaders({"Content-Type":"application/json"}),body:JSON.stringify(body||{}),signal:AbortSignal.timeout(15000)});
   const payload=await response.json().catch(()=>({error:`HTTP ${response.status}`}));
-  if(!response.ok){const error=new Error(payload.error||payload.detail||`视觉服务错误（${response.status}）`);error.status=response.status;throw error}
+  if(!response.ok){const error=new Error(payload.error||payload.detail||`识别服务出错（${response.status}）`);error.status=response.status;throw error}
   return payload;
 }
 
@@ -494,9 +494,9 @@ function expireVisionSession(){
   cameraStream?.getTracks().forEach(track=>track.stop());cameraStream=null;
   $("#training-video").srcObject=null;$(".camera-stage").classList.remove("live");
   const canvas=$("#pose-overlay");canvas.getContext("2d").clearRect(0,0,canvas.width,canvas.height);
-  $(".camera-state").textContent="识别连接已结束";
+  $(".camera-state").innerHTML="<i></i>识别已结束";
   $("#live-cue").textContent="请重新开始识别";
-  $("#live-cue-detail").textContent="服务重启或会话已结束。点击下方按钮重新标定；这不是动作不合规。本次尚未保存的识别结果无法恢复。";
+  $("#live-cue-detail").textContent="识别中断了，点下方按钮重新开始。这不是你的动作有问题。本次还没保存的结果无法恢复。";
   $("#phase-name").textContent="等待重新开始";
   $("#start-training").disabled=false;$("#start-training").textContent="重新开始识别";
 }
@@ -663,7 +663,7 @@ async function captureLandmarksLoop(){
     LANDMARK_QUEUE.push({landmarks:detected.landmarks||[],pose_status:detected.pose_status,width,height,timestamp_s});
     // 丢最旧的而不是最新的：规则层要求时间戳递增，丢掉已经排在前面的帧不影响后续判定。
     while(LANDMARK_QUEUE.length>MAX_QUEUE)LANDMARK_QUEUE.shift();
-    $(".camera-state").textContent=`浏览器识别 · ${Math.round(performance.now()-frameStart)} ms/帧`;
+    $(".camera-state").innerHTML="<i></i>正在识别";$(".camera-state").title=`浏览器识别 · ${Math.round(performance.now()-frameStart)} ms/帧`;
     uploadLandmarksLoop();
   }catch(error){
     if(generation===cameraRequestGeneration&&trainingRunning){$("#live-cue").textContent="识别暂时中断";$("#live-cue-detail").textContent=error.message}
@@ -724,7 +724,7 @@ async function sendCameraFrame(){
       const sample={encode_ms:encodeEnd-encodeStart,request_ms:received-encodeEnd,server_ms:result.processing_ms,render_ms:performance.now()-received,total_ms:performance.now()-frameStart};
       const samples=window.__posePerformance ||= [];samples.push(sample);if(samples.length>120)samples.shift();
       $(".camera-state").title=`编码 ${Math.round(sample.encode_ms)} ms；请求 ${Math.round(sample.request_ms)} ms（含服务处理 ${sample.server_ms??"未知"} ms）；绘制 ${Math.round(sample.render_ms)} ms`;
-      $(".camera-state").textContent=`${result.backend} · ${Math.round(performance.now()-frameStart)} ms/帧`;
+      $(".camera-state").innerHTML="<i></i>正在识别";$(".camera-state").dataset.perf=`${result.backend} · ${Math.round(performance.now()-frameStart)} ms/帧`;
       if(result.training_progress?.status==="completed")await stopLiveTraining();
     }
   }catch(error){if(generation===cameraRequestGeneration&&trainingRunning&&error.status===404){expireVisionSession();return}retryDelay=500;if(generation===cameraRequestGeneration&&trainingRunning){$("#pose-overlay").getContext("2d").clearRect(0,0,$("#pose-overlay").width,$("#pose-overlay").height);$("#live-cue").textContent="识别暂时中断";$("#live-cue-detail").textContent=error.message}}
@@ -770,7 +770,7 @@ async function startLiveTraining(){
     const video=$("#training-video");video.srcObject=cameraStream;await video.play();
     const started=await visionApi("/start",{backend:VISION_MODE==="browser"?"browser":"rtmpose",required_reference:VISION_MODE==="remote"?RTM_REFERENCE:undefined,rule_version:activeExercise.id==="supine"?"slr_v0.1_surface":activeExercise.id==="stand"?"sts_v0.1_dual_baseline":activeExercise.id==="squat"?"squat_v0.1_joint":null,exercise:EXERCISE_TO_VISION[activeExercise.id],side:$("#training-side").value,sets:activeExercise.groups,reps:activeExercise.reps,targets:activeExercise.targets||defaultTargets(activeExercise.id)});
     if(requestGeneration!==cameraRequestGeneration){await visionApi(`/${started.session_id}/stop`,{});return}
-    trainingOwner={userId:currentUser.id,exerciseId:activeExercise.id,clientId:started.session_id};captureStart=performance.now();visionSessionId=started.session_id;trainingRunning=true;startTrainingVideo(trainingOwner);$(".camera-stage").classList.add("live");$(".camera-state").innerHTML="<i></i>视觉算法已连接";button.disabled=false;button.textContent="结束本次训练";sendVisionFrame();
+    trainingOwner={userId:currentUser.id,exerciseId:activeExercise.id,clientId:started.session_id};captureStart=performance.now();visionSessionId=started.session_id;trainingRunning=true;startTrainingVideo(trainingOwner);$(".camera-stage").classList.add("live");$(".camera-state").innerHTML="<i></i>识别已连接";button.disabled=false;button.textContent="结束本次训练";sendVisionFrame();
   }catch(error){cameraStream?.getTracks().forEach(track=>track.stop());cameraStream=null;button.disabled=false;button.textContent="重新允许摄像头";$("#live-cue").textContent="无法开始识别";$("#live-cue-detail").textContent=cameraErrorText(error)}
 }
 
@@ -906,7 +906,7 @@ $("#login-form").addEventListener("submit",async event=>{
     }
     apiToken=result.token;sessionStorage.setItem("kangshifu_api_token",apiToken);
     $("#login-error").textContent="";$("#login-password").value="";enterApp(apiUser(result.user));
-    try{await syncBackendData();showToast("登录成功，已连接数据库")}catch(error){showToast(`已登录，工作台数据暂未加载：${error.message}`)}
+    try{await syncBackendData();showToast("登录成功")}catch(error){showToast(`已登录，工作台数据暂未加载：${error.message}`)}
   }catch(error){if(error.code==="PASSWORD_RESET_REQUIRED")openPasswordReset(account);apiToken="";sessionStorage.removeItem("kangshifu_api_token");$("#login-error").textContent=error instanceof TypeError?"暂时连不上服务器，请检查网络后重试。":error.status===401?"账号或密码不正确。旧版仅在浏览器保存的账号，请先重新注册。":error.message}
   finally{button.disabled=false}
 });
@@ -923,7 +923,7 @@ $("#register-form").addEventListener("submit",async event=>{
   $("#register-error").textContent="正在创建账号…";
   try{
     const result=await api("/auth/register",{method:"POST",auth:false,body:{username:identifier,password,display_name:name,role:selectedRegisterRole}});
-    $("#register-error").textContent="";$("#register-form").reset();setRole("register","patient");setRole("login",result.role);showAuthScreen("login");$("#login-account").value=result.username;$("#login-password").value="";$("#login-error").textContent="注册成功，请输入密码登录。";showToast("账号已保存到数据库");
+    $("#register-error").textContent="";$("#register-form").reset();setRole("register","patient");setRole("login",result.role);showAuthScreen("login");$("#login-account").value=result.username;$("#login-password").value="";$("#login-error").textContent="注册成功，请输入密码登录。";showToast("注册成功");
   }catch(error){$("#register-error").textContent=error instanceof TypeError?"暂时连不上服务器，请检查网络后重试。":error.message}
   finally{button.disabled=false}
 });
@@ -972,7 +972,7 @@ $("#reselect-subject").addEventListener("click",async()=>{
 
 function showTrainingReport(result){
   const report=result?.brief_report;
-  if(!report){showToast("本次结果没有简报，请刷新页面并重启视觉服务");return}
+  if(!report){showToast("本次没有生成训练简报，请刷新页面后重试");return}
   $("#report-overview").textContent=`${report.exercise} · ${report.side}：识别完成 ${report.completed_reps} / 计划 ${report.target_reps} 次`;
   $("#report-sets").innerHTML=report.sets.map(row=>`<section class="report-set"><h3>第 ${row.set} 组 · ${escapeHtml(row.status)}</h3><p>识别完成 ${row.completed_reps} / ${row.target_reps} 次；其中 ${row.angle_hold_met_reps} 次${result.training_session?.rule_version==="squat_v0.1_joint"?"完成本次微蹲目标":"达到角度与保持目标"}。</p><p>${escapeHtml(row.finding)}</p>${row.needs_review_reps?`<small>${row.needs_review_reps} 次动作有部分指标无法判断，需复核。</small>`:""}</section>`).join("");
   if(Number.isFinite(report.attempted_reps)){
@@ -1066,7 +1066,7 @@ async function loadServerReports(){
     const details=await Promise.all([...latest.values()].map(row=>api(`/training-reports/${row.id}`)));
     if(currentUser?.id!==uid)return;
     details.forEach(rememberServerFeedback);
-  }catch(error){if(currentUser?.id===uid){$("#"+target+"-report-status").textContent=`报告加载失败：${error.message}。本机已有反馈仍保留，可点击刷新重试。`;$("#"+target+"-report-list").innerHTML=""}}
+  }catch(error){if(currentUser?.id===uid){$("#"+target+"-report-status").textContent=`报告加载失败：${error.message}。已有的反馈不会丢，可以点刷新重试。`;$("#"+target+"-report-list").innerHTML=""}}
   finally{reportsLoading=false;if(reportsReloadRequested){reportsReloadRequested=false;queueMicrotask(loadServerReports)}}
 }
 async function openSavedReport(id){
@@ -1141,7 +1141,7 @@ async function uploadTrainingVideo(row){
   const uid=currentUser?.id,key=videoKey(uid,row.client_id),entry=pendingVideoFiles.get(key);if(!entry||videoUploads.has(key))return;
   videoUploads.add(key);const status=$("#report-video-actions");status.textContent="正在保存训练视频…";
   try{
-    if(entry.incomplete)throw Error("录制过程中发生错误，录像可能不完整，已保留本机暂存") ;
+    if(entry.incomplete)throw Error("录制过程中发生错误，录像可能不完整，已先保存在这台设备上") ;
     if(!entry.sha256){const hash=await crypto.subtle.digest("SHA-256",await entry.blob.arrayBuffer());entry.sha256=Array.from(new Uint8Array(hash),x=>x.toString(16).padStart(2,"0")).join("");await videoStore("put",key,entry).catch(()=>{})}
     const base=`/training-reports/${row.id}/video`;
     const v=await api(base,{method:"POST",body:{mime:entry.blob.type,size:entry.blob.size,sha256:entry.sha256,duration_s:entry.duration_s,preview_flipped:entry.preview_flipped}});
@@ -1175,7 +1175,7 @@ async function playTrainingVideo(id){
       $("#video-playback-status").textContent=`视频加载中 ${Math.round((i+1)/video.chunk_count*100)}%`;
     }
     playbackUrl=URL.createObjectURL(new Blob(blocks,{type:video.mime}));const player=$("#saved-training-video");player.src=playbackUrl;player.style.transform=video.preview_flipped?"scaleX(-1)":"none";
-    $("#video-playback-status").textContent=`已从数据库加载，时长约 ${Math.round(video.duration_s)} 秒。点击播放查看。`;
+    $("#video-playback-status").textContent=`已加载，时长约 ${Math.round(video.duration_s)} 秒。点击播放查看。`;
   }catch(error){if(generation===playbackGeneration)$("#video-playback-status").textContent=error.message}
 }
 document.addEventListener("click",async event=>{
@@ -1300,7 +1300,7 @@ function startRemoteFrames(){
     if(captureCanvas.width!==img.naturalWidth)captureCanvas.width=img.naturalWidth;if(captureCanvas.height!==img.naturalHeight)captureCanvas.height=img.naturalHeight;captureCanvas.getContext("2d").drawImage(img,0,0);
     updateLiveResult(result);
     const age=Math.max(0,(performance.now()-captureStart)/1000-frame.timestamp_s);
-    $(".camera-state").textContent=`RTMPose · 已识别画面 · 延迟 ${age.toFixed(1)}秒`;
+    $(".camera-state").innerHTML=`<i></i>正在识别 · 延迟 ${age.toFixed(1)} 秒`;
     if(remoteFrames.dropped)$("#live-cue-detail").textContent+=" · 已跳过拥塞画面，次数仅含已识别部分";
   },error=>{
     if(generation!==cameraRequestGeneration||!trainingRunning)return;

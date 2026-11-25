@@ -99,7 +99,7 @@ input:focus,select:focus,textarea:focus{outline:0;border-color:var(--brand);box-
 .avatar{display:grid;place-items:center;flex:0 0 auto;width:36px;height:36px;border-radius:50%;background:var(--brand-soft);color:var(--brand);font-weight:600}
 .profile-block strong{display:block;font-size:15px;font-weight:600}
 .profile-block p{color:var(--muted);font-size:13px}
-.sidebar-foot{display:flex;justify-content:space-between;align-items:center;padding:4px 14px 0}
+.sidebar-foot{display:flex;flex-direction:column;align-items:flex-start;gap:2px;padding:4px 14px 0}
 .sidebar-foot p{color:var(--faint);font-size:12px}
 
 /* ---------- 外壳：手机底部标签 ---------- */
@@ -383,7 +383,7 @@ dialog::backdrop{background:rgba(14,17,22,.5);backdrop-filter:blur(2px)}
 .capture-options button{min-height:40px;padding:0 14px;border:0;border-radius:20px;background:var(--chip);font-size:14px;font-weight:500}
 .capture-options button:hover{background:var(--chip-hover)}
 .message-dialog{width:min(94vw,720px);height:min(84vh,720px);padding:0;overflow:hidden}
-.message-dialog[open]{display:grid;grid-template-rows:auto auto minmax(0,1fr) auto}
+.message-dialog[open]{display:flex;flex-direction:column}
 .message-dialog header{display:flex;justify-content:space-between;align-items:center;padding:18px 20px;border-bottom:1px solid var(--line)}
 .message-dialog header .eyebrow{display:block}
 .message-dialog h2{font-size:18px}
@@ -393,7 +393,7 @@ dialog::backdrop{background:rgba(14,17,22,.5);backdrop-filter:blur(2px)}
 .message-contacts button{position:relative;height:34px;padding:0 14px;border:0;border-radius:10px;background:var(--chip);white-space:nowrap;font-size:14px}
 .message-contacts button.active{background:var(--ink);color:var(--bg);font-weight:600}
 .message-contacts i{display:inline-grid;place-items:center;min-width:18px;height:18px;margin-left:6px;padding:0 5px;border-radius:9px;background:var(--warn);color:#fff;font:600 11px/1 var(--num);font-style:normal}
-.message-thread{min-height:0;padding:20px;overflow:auto;background:var(--bg-2)}
+.message-thread{flex:1;min-height:0;padding:20px;overflow:auto;background:var(--bg-2)}
 .message-bubble{max-width:72%;margin-bottom:14px}
 .message-bubble.mine{margin-left:auto}
 .message-bubble span{display:block;margin-bottom:4px;color:var(--faint);font-size:12px}
@@ -401,7 +401,7 @@ dialog::backdrop{background:rgba(14,17,22,.5);backdrop-filter:blur(2px)}
 .message-bubble p{padding:10px 14px;border-radius:4px 18px 18px 18px;background:var(--bg);font-size:15px;box-shadow:0 1px 2px rgba(14,17,22,.06)}
 .message-bubble.mine p{border-radius:18px 4px 18px 18px;background:var(--brand);color:var(--on-brand)}
 .empty-thread{padding-top:80px;text-align:center;color:var(--muted);font-size:14px}
-.message-compose{display:grid;grid-template-columns:1fr auto;gap:8px;padding:12px 16px;border-top:1px solid var(--line)}
+.message-compose{display:grid;grid-template-columns:1fr auto;align-items:center;gap:8px;padding:12px 16px;border-top:1px solid var(--line)}
 .message-compose input{min-width:0;height:44px;padding:0 16px;border-radius:22px;background:var(--bg-2)}
 .training-report{width:min(94vw,720px);max-height:88dvh;overflow:auto}
 .report-overview{margin:12px 0;font-weight:500}
@@ -435,7 +435,7 @@ body.training-open{overflow:hidden}
 .camera-stage.live #pose-overlay{pointer-events:auto;cursor:crosshair;z-index:2}
 .frame-guide{position:absolute;inset:6%;border:1px dashed rgba(255,255,255,.35);border-radius:var(--radius-l);pointer-events:none;z-index:3}
 .frame-guide span{position:absolute;left:12px;top:12px;padding:6px 12px;border-radius:16px;background:rgba(14,17,22,.72);color:#fff;font-size:13px}
-.phase-pill{position:absolute;left:16px;bottom:16px;z-index:3;padding:6px 12px;border-radius:16px;background:rgba(14,17,22,.72);color:#fff;font-size:13px;pointer-events:none}
+.phase-pill{position:absolute;right:16px;top:16px;z-index:3;padding:6px 12px;border-radius:16px;background:rgba(14,17,22,.72);color:#fff;font-size:13px;pointer-events:none}
 .phase-pill b{margin-left:6px;color:var(--ok-live)}
 .camera-stage .live-cue{position:absolute;left:50%;bottom:56px;z-index:4;transform:translateX(-50%);width:max-content;max-width:min(86%,760px);padding:14px 28px;border-radius:20px;background:rgba(14,17,22,.82);color:#fff;text-align:center;pointer-events:none;animation:cue-in .3s var(--ease)}
 @keyframes cue-in{from{opacity:0;transform:translate(-50%,10px)}to{opacity:1;transform:translateX(-50%)}}
@@ -444,7 +444,7 @@ body.training-open{overflow:hidden}
 .live-cue p{margin-top:4px;color:#FFD2B3;font-size:clamp(13px,1.3vw,17px)}
 .live-cue p:empty{display:none}
 .training-controls{display:flex;flex-wrap:wrap;align-items:center;gap:8px;margin-top:12px}
-.training-controls #start-training{min-width:220px}
+.training-controls #start-training{width:auto;min-width:240px;min-height:44px;border-radius:22px}
 .training-controls .capture-options{display:flex;flex-wrap:wrap;margin:0}
 .training-controls #view-last-report{margin-top:0}
 .training-setup{margin-top:12px;padding:16px;border-radius:var(--radius-l);background:var(--bg-2);display:grid;gap:10px}
@@ -491,7 +491,7 @@ body.training-open{overflow:hidden}
 @media (max-width:1024px){
   :root{--side:0px}
   .menu-button{display:grid}
-  .sidebar{width:260px;transform:translateX(-100%);transition:transform .3s var(--ease);box-shadow:none;border-right:1px solid var(--line)}
+  .sidebar{z-index:40;width:260px;transform:translateX(-100%);transition:transform .3s var(--ease);box-shadow:none;border-right:1px solid var(--line)}
   .sidebar.mobile-open{transform:none;box-shadow:var(--shadow-pop)}
   .page{padding:8px 20px 64px}
 }
@@ -503,7 +503,9 @@ body.training-open{overflow:hidden}
   .tabbar .nav-item{flex:1;flex-direction:column;justify-content:center;gap:2px;min-height:56px;padding:0;border-radius:0;background:transparent;font-size:11px;color:var(--muted)}
   .tabbar .nav-item.active{background:transparent;color:var(--ink);font-weight:600}
   .page-heading{margin:4px 0 16px}
-  .patient-heading .plan-stamp{width:100%}
+  .patient-heading .plan-stamp{width:100%;padding:10px 14px}
+  .today-strip{padding:12px 16px;gap:8px 12px}
+  .today-strip strong{font-size:20px}
   .today-strip{grid-template-columns:1fr auto}
   .today-strip .progress-track{grid-column:1/-1;grid-row:2}
   .today-strip>p{grid-column:1/-1}
@@ -550,6 +552,8 @@ body.training-open{overflow:hidden}
   .training-grid{padding:0 0 24px;gap:16px}
   .camera-stage{border-radius:0;aspect-ratio:3/4;max-height:62dvh}
   .camera-stage .live-cue{bottom:20px;padding:10px 18px}
+  .frame-guide{inset:60px 4% 4%}
+  .phase-pill{top:14px;right:12px}
   .training-controls,.training-setup,.live-panel,.training-main>.training-disclaimer{margin-left:16px;margin-right:16px}
   .training-controls #start-training{flex:1 1 100%}
 }
