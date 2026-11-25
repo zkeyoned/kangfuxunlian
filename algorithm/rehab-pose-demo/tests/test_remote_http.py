@@ -32,6 +32,16 @@ class RemoteHTTPTests(unittest.TestCase):
             self.assertEqual(self.post('/start', {'backend': 'rtmpose', 'required_reference': 'expected'}), 503)
             model.assert_not_called()
 
+    def test_browser_backend_allowed_when_server_is_rtmpose_only(self):
+        analyzer = SimpleNamespace(backend='browser', owner=None, close=lambda: None)
+        with patch.object(live_api, 'authenticate', return_value=1), \
+             patch.object(live_api, 'REMOTE_RTMPOSE', True), \
+             patch.object(live_api, 'reference_status', return_value={'ready': True, 'reference_id': 'expected'}), \
+             patch.object(live_api, 'SESSIONS', {}), \
+             patch.object(live_api, 'LiveAnalyzer', return_value=analyzer) as model:
+            self.assertEqual(self.post('/start', {'backend': 'browser'}), 200)
+            self.assertEqual(model.call_args.kwargs['backend'], 'browser')
+
     def test_frames_require_same_authenticated_owner(self):
         session = SimpleNamespace(owner=1, backend='rtmpose')
         with patch.object(live_api, 'SESSIONS', {'test': session}), \
