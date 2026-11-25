@@ -890,6 +890,7 @@ document.addEventListener("click",async event=>{
   if(event.target.closest("#publish-plan"))await persistVisualPlan("published");
   if(event.target.closest("#logout")){closeTrainingPlayback();await closeTraining();clearInterval(reportPoll);try{await api("/auth/logout",{method:"POST"})}catch(error){}apiToken="";sessionStorage.removeItem("kangshifu_api_token");await closeTraining();if($("#message-dialog").open)$("#message-dialog").close();$("#training-report-dialog").close();lastTrainingReport=null;$("#view-last-report").hidden=true;currentUser=null;$("#app-shell").classList.add("hidden");showAuthScreen("login");$("#login-form").reset();setRole("login","patient");$("#login-error").textContent=""}
   if(event.target.closest("#mobile-menu"))$(".sidebar").classList.toggle("mobile-open");
+  if(event.target.closest(".sidebar-backdrop"))$(".sidebar").classList.remove("mobile-open");
 });
 
 $("#login-form").addEventListener("submit",async event=>{
