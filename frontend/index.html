@@ -5,7 +5,7 @@
   <meta name="viewport" content="width=device-width, initial-scale=1.0">
   <meta name="description" content="康师复居家康复训练与专业随访前端演示">
   <title>康师复 | 智能康复协作平台</title>
-  <link rel="icon" type="image/svg+xml" href="data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 64 64'%3E%3Crect width='64' height='64' rx='16' fill='%2318332c'/%3E%3Cpath d='M19 14h9v15l14-15h11L37 31l17 19H42L28 34v16h-9z' fill='%23f5c451'/%3E%3C/svg%3E">
+  <link rel="icon" type="image/svg+xml" href="data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 64 64'%3E%3Crect width='64' height='64' rx='18' fill='%231F5C49'/%3E%3Ctext x='32' y='44' font-size='34' text-anchor='middle' fill='white' font-family='PingFang SC,Microsoft YaHei,sans-serif' font-weight='600'%3E%E5%A4%8D%3C/text%3E%3C/svg%3E">
   <link rel="stylesheet" href="styles.css">
 </head>
 <body>
@@ -31,7 +31,7 @@
         <p id="login-error" class="login-error" role="alert" aria-live="polite"></p>
         <button class="primary-button login-button" type="submit">登录</button>
         <p class="auth-switch">还没有账号？<button type="button" id="show-register">立即注册</button></p>
-        <div class="demo-accounts"><p>虚构演示账号（不合规的初始密码需更新，改密后请手动输入）</p><button type="button" data-demo-account="patient"><b>张先生 · 患者端</b><span>p.zhang / zhang123</span></button><button type="button" data-demo-account="zhaomin"><b>赵敏 · 患者端</b><span>p.zhaomin / zhao123</span></button><button type="button" data-demo-account="linyuqing"><b>林雨晴 · 患者端</b><span>p.linyuqing / linyu123</span></button><button type="button" data-demo-account="zhouqiming"><b>周启明 · 患者端</b><span>p.zhouqiming / zhou123</span></button><button type="button" data-demo-account="wu"><b>吴女士 · 患者端</b><span>p.wu / wu123</span></button><button type="button" data-demo-account="therapist"><b>康复师端</b><span>dr.lin / lin123</span></button></div>
+        <div class="demo-accounts"><p>演示账号（虚构），点一下自动填入</p><button type="button" data-demo-account="patient"><b>张先生 · 患者端</b><span>p.zhang / zhang123</span></button><button type="button" data-demo-account="zhaomin"><b>赵敏 · 患者端</b><span>p.zhaomin / zhao123</span></button><button type="button" data-demo-account="linyuqing"><b>林雨晴 · 患者端</b><span>p.linyuqing / linyu123</span></button><button type="button" data-demo-account="zhouqiming"><b>周启明 · 患者端</b><span>p.zhouqiming / zhou123</span></button><button type="button" data-demo-account="wu"><b>吴女士 · 患者端</b><span>p.wu / wu123</span></button><button type="button" data-demo-account="therapist"><b>康复师端</b><span>dr.lin / lin123</span></button></div>
       </form>
     </div>
   </section>
@@ -59,32 +59,41 @@
   </section>
 
   <div id="app-shell" class="app-shell hidden">
+    <header class="topbar">
+      <button id="mobile-menu" class="icon-button menu-button" aria-label="打开菜单"><svg class="icon" viewBox="0 0 24 24" aria-hidden="true"><path d="M4 7h16M4 12h16M4 17h16"/></svg></button>
+      <a class="brand" href="#" aria-label="康师复首页"><span class="brand-mark" aria-hidden="true">复</span><span><b>康师复</b></span></a>
+      <div class="breadcrumb"><span id="section-label">患者端</span><b id="page-label">今日训练</b></div>
+      <div class="top-actions"><button id="theme-toggle" class="icon-button" aria-label="切换深色模式"><svg class="icon" viewBox="0 0 24 24" aria-hidden="true"><path d="M20 14.5A8 8 0 0 1 9.5 4 8 8 0 1 0 20 14.5z"/></svg></button><button id="open-messages" class="notification-button" aria-label="打开在线沟通"><svg class="icon" viewBox="0 0 24 24" aria-hidden="true"><path d="M4 5h16v11H9l-5 4z"/></svg><i id="message-count">0</i></button></div>
+    </header>
     <aside class="sidebar">
       <a class="brand" href="#"><span class="brand-mark">复</span><span><b>康师复</b><small>康复协作</small></span></a>
-      <div class="profile-block"><span class="avatar" id="profile-avatar">林</span><div><strong id="profile-name">林雨晴</strong><p id="profile-meta">患者 · 右膝康复中</p></div></div>
       <nav id="patient-nav" class="side-nav" aria-label="患者端导航">
-        <button class="nav-item active" data-page="patient-home"><span>01</span>今日训练</button>
-        <button class="nav-item" data-page="patient-feedback"><span>02</span>动作反馈</button>
-        <button class="nav-item" data-page="patient-plan"><span>03</span>我的方案</button>
-        <button class="nav-item" data-page="patient-history"><span>04</span>训练记录</button>
-        <button class="nav-item" data-page="care-connections"><span>05</span>我的康复师</button>
+        <button class="nav-item active" data-page="patient-home"><svg class="icon" viewBox="0 0 24 24" aria-hidden="true"><path d="M3 10.5 12 3l9 7.5V20a1 1 0 0 1-1 1h-5v-6h-6v6H4a1 1 0 0 1-1-1z"/></svg><span class="nav-label">今日训练</span></button>
+        <button class="nav-item" data-page="patient-history"><svg class="icon" viewBox="0 0 24 24" aria-hidden="true"><path d="M4 19V5M4 19h16M8 15l4-4 3 3 5-6"/></svg><span class="nav-label">训练记录</span></button>
+        <button class="nav-item" data-page="patient-feedback"><svg class="icon" viewBox="0 0 24 24" aria-hidden="true"><path d="M3 12h4l3-8 4 16 3-8h4"/></svg><span class="nav-label">动作反馈</span></button>
+        <button class="nav-item" data-page="patient-plan"><svg class="icon" viewBox="0 0 24 24" aria-hidden="true"><rect x="5" y="4" width="14" height="17" rx="2"/><path d="M9 4h6v3H9zM9 12h6M9 16h4"/></svg><span class="nav-label">我的方案</span></button>
+        <button class="nav-item" data-page="care-connections"><svg class="icon" viewBox="0 0 24 24" aria-hidden="true"><circle cx="12" cy="8" r="4"/><path d="M4 21c1.5-4 4.5-6 8-6s6.5 2 8 6"/></svg><span class="nav-label">我的康复师</span></button>
       </nav>
       <nav id="therapist-nav" class="side-nav hidden" aria-label="康复师端导航">
-        <button class="nav-item active" data-page="therapist-overview"><span>01</span>患者总览</button>
-        <button class="nav-item" data-page="therapist-plans"><span>02</span>康复方案</button>
-        <button class="nav-item" data-page="therapist-library"><span>03</span>动作与规则</button>
-        <button class="nav-item" data-page="therapist-followup"><span>04</span>随访提醒</button>
-        <button class="nav-item" data-page="care-connections"><span>05</span>我的患者 · 关联管理</button><button class="nav-item" data-page="therapist-reports"><span>06</span>训练报告 <b id="report-unread-count"></b></button>
+        <button class="nav-item active" data-page="therapist-overview"><svg class="icon" viewBox="0 0 24 24" aria-hidden="true"><circle cx="9" cy="8" r="3.5"/><path d="M2.5 20c1-3.5 3.6-5.5 6.5-5.5s5.5 2 6.5 5.5M16 4.5a3.5 3.5 0 0 1 0 7M18 14.8c1.8.8 3 2.6 3.5 5.2"/></svg><span class="nav-label">患者总览</span></button>
+        <button class="nav-item" data-page="therapist-reports"><svg class="icon" viewBox="0 0 24 24" aria-hidden="true"><path d="M7 3h7l5 5v13H7z"/><path d="M14 3v5h5M10 13h6M10 17h4"/></svg><span class="nav-label">训练报告</span><b id="report-unread-count"></b></button>
+        <button class="nav-item" data-page="therapist-plans"><svg class="icon" viewBox="0 0 24 24" aria-hidden="true"><rect x="5" y="4" width="14" height="17" rx="2"/><path d="M9 4h6v3H9zM9 12h6M9 16h4"/></svg><span class="nav-label">康复方案</span></button>
+        <button class="nav-item" data-page="therapist-library"><svg class="icon" viewBox="0 0 24 24" aria-hidden="true"><path d="M9 6h11M9 12h11M9 18h11M4 6h.01M4 12h.01M4 18h.01"/></svg><span class="nav-label">动作与规则</span></button>
+        <button class="nav-item" data-page="therapist-followup"><svg class="icon" viewBox="0 0 24 24" aria-hidden="true"><path d="M6 9a6 6 0 1 1 12 0c0 6 2 7 2 7H4s2-1 2-7M10 20a2 2 0 0 0 4 0"/></svg><span class="nav-label">随访提醒</span></button>
+        <button class="nav-item" data-page="care-connections"><svg class="icon" viewBox="0 0 24 24" aria-hidden="true"><path d="M10 14a4 4 0 0 0 5.7 0l3-3a4 4 0 0 0-5.7-5.7l-1 1M14 10a4 4 0 0 0-5.7 0l-3 3a4 4 0 0 0 5.7 5.7l1-1"/></svg><span class="nav-label">关联管理</span></button>
       </nav>
-      <div class="sidebar-foot"><button id="logout" class="text-button">退出登录</button><p>康师复产品演示</p></div>
+      <div class="profile-block"><span class="avatar" id="profile-avatar">林</span><div><strong id="profile-name">林雨晴</strong><p id="profile-meta">患者</p></div></div>
+      <div class="sidebar-foot"><button id="logout" class="text-button">退出登录</button><p>训练辅助，非医疗诊断</p></div>
     </aside>
-
+    <div class="sidebar-backdrop" aria-hidden="true"></div>
+    <nav id="patient-tabbar" class="tabbar" aria-label="患者端底部导航">
+      <button class="nav-item" data-page="patient-home"><svg class="icon" viewBox="0 0 24 24" aria-hidden="true"><path d="M3 10.5 12 3l9 7.5V20a1 1 0 0 1-1 1h-5v-6h-6v6H4a1 1 0 0 1-1-1z"/></svg><span class="nav-label">首页</span></button>
+      <button class="nav-item" data-page="patient-history"><svg class="icon" viewBox="0 0 24 24" aria-hidden="true"><path d="M4 19V5M4 19h16M8 15l4-4 3 3 5-6"/></svg><span class="nav-label">记录</span></button>
+      <button class="nav-item" data-page="patient-feedback"><svg class="icon" viewBox="0 0 24 24" aria-hidden="true"><path d="M3 12h4l3-8 4 16 3-8h4"/></svg><span class="nav-label">反馈</span></button>
+      <button class="nav-item" data-page="patient-plan"><svg class="icon" viewBox="0 0 24 24" aria-hidden="true"><rect x="5" y="4" width="14" height="17" rx="2"/><path d="M9 4h6v3H9zM9 12h6M9 16h4"/></svg><span class="nav-label">方案</span></button>
+      <button class="nav-item" data-page="care-connections"><svg class="icon" viewBox="0 0 24 24" aria-hidden="true"><circle cx="12" cy="8" r="4"/><path d="M4 21c1.5-4 4.5-6 8-6s6.5 2 8 6"/></svg><span class="nav-label">康复师</span></button>
+    </nav>
     <main class="main-area">
-      <header class="topbar">
-        <button id="mobile-menu" class="icon-button menu-button" aria-label="打开菜单">☰</button>
-        <div class="breadcrumb"><span id="section-label">患者端</span><b id="page-label">今日训练</b></div>
-        <div class="top-actions"><button id="theme-toggle" class="icon-button" aria-label="切换深色模式">◐</button><button id="open-messages" class="notification-button" aria-label="打开在线沟通">消息 <i id="message-count">0</i></button></div>
-      </header>
 
       <section id="care-connections" class="page">
         <div class="page-heading"><div><p class="eyebrow">患者与康复师协作</p><h2 id="care-title">关联管理</h2><p>查找对方，发起申请，接受后建立关联。</p></div><button type="button" id="care-refresh" class="secondary-button">刷新申请</button></div>
@@ -100,17 +109,17 @@
           <div><p class="eyebrow" id="patient-date"></p><h2 id="patient-greeting">今日训练</h2><p id="patient-training-intro">请先关联康复师或添加病症与动作。</p></div>
           <div class="plan-stamp"><span>当前方案</span><strong>轻中度膝骨关节炎</strong><small>初赛演示病例 · 右膝 · 第 2 周</small></div>
         </div>
-        <div class="today-strip"><div><span>今日进度</span><strong><b id="completed-count">0</b> / <b id="exercise-total">0</b></strong></div><div class="progress-track"><i id="today-progress" style="width:0%"></i></div><p id="today-remaining" title="按未完成项目的当前组数与次数估算，含组间休息，不含准备和额外暂停。">正在计算预计时间</p></div>
-        <div class="section-title"><div><p class="eyebrow">训练清单</p><h3 id="training-list-title">尚未添加训练动作</h3><small>预计时间包含组间休息，不含准备与额外暂停，实际用时随动作节奏变化。</small></div><p>每个动作采用独立评估标准，不以单一“合格率”概括。</p></div>
-        <button id="edit-training-selection" class="secondary-button" data-add-selection>添加或管理病症与动作</button><div id="exercise-list" class="exercise-list"></div>
+        <div class="today-strip"><div><span>今天完成</span><strong><b id="completed-count">0</b> / <b id="exercise-total">0</b></strong></div><div class="progress-track"><i id="today-progress" style="width:0%"></i></div><p id="today-remaining" title="按未完成项目的当前组数与次数估算，含组间休息，不含准备和额外暂停。">正在计算预计时间</p></div>
+        <div class="section-title"><div><h3 id="training-list-title">尚未添加训练动作</h3><small>预计时间含组间休息，实际用时随动作节奏变化</small></div><button id="edit-training-selection" class="secondary-button" data-add-selection>添加或管理动作</button></div>
+        <div id="exercise-list" class="exercise-list"></div>
       </section>
 
       <section id="patient-feedback" class="page">
-        <div class="page-heading"><div><p class="eyebrow">动作反馈</p><h2>根据实际训练，查看需要调整的细节</h2><p id="feedback-source">完成训练后生成真实反馈。每个动作展示最近一次结果。</p></div><span class="demo-badge">训练结果</span></div>
+        <div class="page-heading"><div><p class="eyebrow">动作反馈</p><h2>动作反馈</h2><p id="feedback-source">完成训练后生成真实反馈。每个动作展示最近一次结果。</p></div></div>
         <div class="feedback-layout">
           <aside class="feedback-index" id="feedback-index"></aside>
           <article class="feedback-detail">
-            <div class="feedback-title"><div><p id="feedback-kicker" class="eyebrow">动作 01</p><h3 id="feedback-title">坐姿直腿抬高</h3></div><span id="feedback-status" class="status warn">需调整</span></div>
+            <div class="feedback-title"><div><p id="feedback-kicker" class="eyebrow">动作 01</p><h3 id="feedback-title">坐姿伸膝</h3></div><span id="feedback-status" class="status warn">需调整</span></div>
             <div id="feedback-hero" class="feedback-hero"></div>
             <div id="feedback-metrics" class="metric-table"></div>
             <div id="feedback-sets"></div>
@@ -128,7 +137,7 @@
       </section>
 
       <section id="patient-history" class="page">
-        <div class="page-heading"><div><p class="eyebrow">训练记录</p><h2>趋势比一次得分更重要</h2><p>按动作查看完成度、控制质量和需要持续关注的问题。</p></div><select class="select-control"><option>最近 7 天</option><option>最近 30 天</option></select></div>
+        <div class="page-heading"><div><p class="eyebrow">训练记录</p><h2>训练记录</h2><p>按动作查看完成度、控制质量和需要持续关注的问题。</p></div></div>
         <button data-refresh-reports class="secondary-button">刷新训练记录</button><p id="patient-report-status" role="status"></p><div id="patient-report-list"></div>
       </section>
 
@@ -141,7 +150,7 @@
       </section>
 
       <section id="therapist-plans" class="page">
-        <div class="page-heading"><div><p class="eyebrow">康复方案编辑器</p><h2>从病症到动作，建立可执行的训练处方</h2><p>为不同患者选择康复方向、阶段、动作和独立量化规则。</p></div><span id="save-state" class="save-state">未保存</span></div>
+        <div class="page-heading"><div><p class="eyebrow">康复方案编辑器</p><h2>康复方案</h2><p>为不同患者选择康复方向、阶段、动作和独立量化规则。</p></div><span id="save-state" class="save-state">未保存</span></div>
         <div class="builder-steps" aria-label="方案编辑步骤"><span class="active">1 患者与病症</span><span>2 选择动作</span><span>3 设置规则</span><span>4 发布</span></div>
         <div class="plan-builder">
           <div class="builder-main">
@@ -155,20 +164,32 @@
       </section>
 
       <section id="therapist-library" class="page">
-        <div class="page-heading"><div><p class="eyebrow">动作与规则</p><h2>动作不是模板，指标也不该一刀切</h2><p>定义每个动作的阶段、识别指标、纠错文案与拍摄要求。</p></div><button class="primary-button">＋ 新建动作</button></div>
+        <div class="page-heading"><div><p class="eyebrow">动作与规则</p><h2>动作与规则</h2><p>定义每个动作的阶段、识别指标、纠错文案与拍摄要求。</p></div><button class="primary-button">＋ 新建动作</button></div>
         <div id="rule-library" class="rule-library"></div>
       </section>
 
       <section id="therapist-followup" class="page">
-        <div class="page-heading"><div><p class="eyebrow">随访提醒</p><h2>把需要沟通的时刻集中起来</h2><p>疼痛变化、反复动作问题和低依从性将进入随访队列。</p></div></div>
+        <div class="page-heading"><div><p class="eyebrow">随访提醒</p><h2>随访提醒</h2><p>疼痛变化、反复动作问题和低依从性将进入随访队列。</p></div></div>
         <div class="followup-list"><article><time>今天 09:42</time><div><span class="status danger">优先</span><h3>赵敏 · 膝骨关节炎</h3><p>连续两次训练后疼痛反馈达到 6 分，请确认训练剂量。</p></div><button class="secondary-button" data-chat-patient="赵敏">在线沟通</button></article><article><time>昨天 20:16</time><div><span class="status warn">动作复核</span><h3>林雨晴 · 膝骨关节炎</h3><p>坐姿伸膝连续三组顶点保持不足，建议查看动作片段。</p></div><button class="secondary-button" data-chat-patient="林雨晴">在线沟通</button></article><article><time>9月15日</time><div><span class="status neutral">依从性</span><h3>周启明 · 前交叉韧带术后</h3><p>计划训练连续两天未完成，可发送提醒并询问原因。</p></div><button class="secondary-button" data-chat-patient="周启明">在线沟通</button></article></div>
       </section>
     </main>
   </div>
 
   <section id="training-screen" class="training-screen" aria-hidden="true">
-    <header class="training-head"><button class="training-back" data-close-training aria-label="返回今日训练">← 返回</button><div><p id="training-kicker" class="eyebrow">动作 01</p><h2 id="training-title">坐姿直腿抬高</h2></div><div class="camera-state"><i></i>摄像头已就绪</div></header>
-    <div class="training-grid"><div class="camera-stage"><img id="training-image" src="assets/seated-knee-extension-v2.jpg" alt="动作识别示范"><video id="training-video" playsinline muted></video><canvas id="pose-overlay" aria-hidden="true"></canvas><div class="frame-guide"><span>请保持训练侧髋、膝、踝完整入镜</span></div><div class="phase-pill">当前阶段 <b id="phase-name">准备</b></div></div><aside class="live-panel"><div class="live-cue"><span>即时提示</span><strong id="live-cue">请坐直，患侧脚尖朝前</strong><p id="live-cue-detail">识别稳定后开始计次</p></div><div id="live-metrics" class="live-metrics"></div><div class="cue-log"><div><h3>本组反馈</h3><span>实时更新</span></div><ol id="cue-log"><li><time>准备</time><p>调整相机，让髋、膝、踝完整入镜。</p></li></ol></div><div id="squat-setup" hidden><p>侧面固定水平拍摄，肩、髋、膝、踝可见。先锁定训练者，再确认支撑并舒适站稳2秒；移动机位后需重新标定。</p><label>支撑物<select id="squat-support"><option value="chair">稳定椅背</option><option value="fixed_surface">固定台面</option></select></label><label>脚位说明（可选）<input id="squat-feet" maxlength="200" placeholder="例如双脚约髋宽"></label><label><input id="squat-support-confirmed" type="checkbox">我已确认双手扶稳支撑物</label><button id="squat-confirm" type="button">确认支撑，开始站姿标定</button></div><div id="sts-setup" hidden><p>固定水平侧面机位，覆盖坐姿和站姿。准备动作不计次；座椅或机位变化后重新标定。</p><label>座高（厘米，可留空）<input id="sts-seat" type="number" min="10" max="100"></label><label><input id="sts-cushion" type="checkbox">使用坐垫</label><label>脚位说明<input id="sts-feet" maxlength="200" placeholder="例如双脚约髋宽、脚稍后收"></label><label>辅助方式<select id="sts-assistance"><option value="">请选择</option><option value="none">无辅助</option><option value="thighs">手扶大腿</option><option value="armrests">手扶固定扶手</option></select></label><button type="button" data-sts-stage="sit">① 采集坐姿（坐稳2秒）</button><button type="button" data-sts-stage="stand">② 采集站姿（站稳2秒）</button><button type="button" data-sts-stage="confirm">③ 我已核对舒适站直，确认</button></div><div class="capture-options"><button id="calibrate-surface" type="button" hidden>动作二：标定床面参考线</button><button id="reselect-subject" type="button">重新选择训练者</button><button id="flip-preview" type="button">左右翻转画面</button></div><button id="start-training" class="primary-button full-button">允许摄像头并开始识别</button><button id="view-last-report" class="secondary-button full-button" type="button" hidden>查看上次训练简报</button><p class="training-disclaimer">公网识别会临时上传摄像头画面至服务器分析，识别画面和数值同步显示，可能存在网络延迟。动作角度来自二维摄像头估计，仅用于训练辅助，不构成医疗诊断；开始训练后会录制无声视频，结束时保存到账号数据库，供你和已关联康复师查看。</p></aside></div>
+    <header class="training-head"><button class="training-back" data-close-training aria-label="返回今日训练"><svg class="icon" viewBox="0 0 24 24" aria-hidden="true"><path d="M15 5l-7 7 7 7"/></svg></button><div class="training-titles"><h2 id="training-title">坐姿伸膝</h2><p id="training-kicker" class="eyebrow">动作 01</p></div><div class="camera-state"><i></i>摄像头未开启</div></header>
+    <div class="training-grid">
+      <div class="training-main">
+        <div class="camera-stage"><img id="training-image" src="assets/seated-knee-extension-v2.jpg" alt="动作识别示范"><video id="training-video" playsinline muted></video><canvas id="pose-overlay" aria-hidden="true"></canvas><div class="frame-guide"><span>请保持训练侧髋、膝、踝完整入镜</span></div><div class="phase-pill">当前阶段 <b id="phase-name">准备</b></div><div class="live-cue" aria-live="assertive"><span>即时提示</span><strong id="live-cue">请坐直，患侧脚尖朝前</strong><p id="live-cue-detail">识别稳定后开始计次</p></div></div>
+        <div class="training-controls"><button id="start-training" class="primary-button full-button">允许摄像头并开始识别</button><button id="view-last-report" class="secondary-button full-button" type="button" hidden>查看上次训练简报</button><div class="capture-options"><button id="calibrate-surface" type="button" hidden>动作二：标定床面参考线</button><button id="reselect-subject" type="button">重新选择训练者</button><button id="flip-preview" type="button">左右翻转画面</button></div></div>
+        <div id="squat-setup" class="training-setup" hidden><p>侧面固定水平拍摄，肩、髋、膝、踝可见。先锁定训练者，再确认支撑并舒适站稳2秒；移动机位后需重新标定。</p><label>支撑物<select id="squat-support"><option value="chair">稳定椅背</option><option value="fixed_surface">固定台面</option></select></label><label>脚位说明（可选）<input id="squat-feet" maxlength="200" placeholder="例如双脚约髋宽"></label><label><input id="squat-support-confirmed" type="checkbox">我已确认双手扶稳支撑物</label><button id="squat-confirm" type="button">确认支撑，开始站姿标定</button></div>
+        <div id="sts-setup" class="training-setup" hidden><p>固定水平侧面机位，覆盖坐姿和站姿。准备动作不计次；座椅或机位变化后重新标定。</p><label>座高（厘米，可留空）<input id="sts-seat" type="number" min="10" max="100"></label><label><input id="sts-cushion" type="checkbox">使用坐垫</label><label>脚位说明<input id="sts-feet" maxlength="200" placeholder="例如双脚约髋宽、脚稍后收"></label><label>辅助方式<select id="sts-assistance"><option value="">请选择</option><option value="none">无辅助</option><option value="thighs">手扶大腿</option><option value="armrests">手扶固定扶手</option></select></label><button type="button" data-sts-stage="sit">① 采集坐姿（坐稳2秒）</button><button type="button" data-sts-stage="stand">② 采集站姿（站稳2秒）</button><button type="button" data-sts-stage="confirm">③ 我已核对舒适站直，确认</button></div>
+        <p class="training-disclaimer">公网识别会临时上传摄像头画面至服务器分析，识别画面和数值同步显示，可能存在网络延迟。动作角度来自二维摄像头估计，仅用于训练辅助，不构成医疗诊断；开始训练后会录制无声视频，结束时保存到你的账号，供你和已关联康复师查看。</p>
+      </div>
+      <aside class="live-panel">
+        <section class="panel-card"><div class="panel-head"><h3>这一组</h3><span>实时更新</span></div><div id="live-metrics" class="live-metrics"></div></section>
+        <div class="cue-log"><div><h3>刚才的提示</h3><span>最新在上</span></div><ol id="cue-log"><li><time>准备</time><p>调整相机，让髋、膝、踝完整入镜。</p></li></ol></div>
+      </aside>
+    </div>
   </section>
   <dialog id="exercise-guide-dialog" class="guide-dialog">
     <button class="dialog-close" type="button" data-close-guide aria-label="关闭">×</button>

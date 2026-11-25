@@ -1,6 +1,6 @@
 const exercises = [
   {
-    id: "seated", name: "坐姿直腿抬高", short: "坐姿伸膝", image: "assets/seated-knee-extension-v2.jpg", dose: "2 组 × 10 次", done: false,
+    id: "seated", name: "坐姿伸膝", short: "坐姿伸膝", image: "assets/seated-knee-extension-v2.jpg", dose: "2 组 × 10 次", done: false,
     flow: "坐稳 → 缓慢伸直患侧膝关节 → 保持 → 缓慢放下",
     focus: ["完成次数", "最大伸膝角度", "顶点保持", "抬起与下放速度"],
     hero: ["还差 7° 完全伸直", "第 8 次动作在顶点停留不足，下一次伸直后多保持 1.6 秒。"],
@@ -91,7 +91,7 @@ function collectVisualPlan(status){
 async function persistVisualPlan(status){
  const pid=$("#plan-patient").value;if(!pid){showToast("请先关联并选择患者");return}
  try{const body=collectVisualPlan(status);$("#publish-plan").disabled=$("#save-draft").disabled=true;
- const saved=await api(`/patients/${pid}/visual-prescription`,{method:"POST",body});$("#save-state").textContent=status==="draft"?"草稿已保存，患者不可见":`已发布版本 ${saved.id}`;showToast(status==="draft"?"草稿已存入数据库":"已发布，患者空闲页面将在15秒内同步，下次训练生效");
+ const saved=await api(`/patients/${pid}/visual-prescription`,{method:"POST",body});$("#save-state").textContent=status==="draft"?"草稿已保存，患者不可见":`已发布版本 ${saved.id}`;showToast(status==="draft"?"草稿已保存":"已发布，患者空闲页面将在15秒内同步，下次训练生效");
  }catch(e){showToast(e.message);$("#save-state").textContent="保存失败，未发布"}finally{$("#publish-plan").disabled=$("#save-draft").disabled=false}
 }
 async function syncVisualPlan(){
@@ -146,7 +146,7 @@ async function api(path, options={}){
 
 function apiUser(user){
   const therapist=user.role==="therapist";
-  return {...user,name:user.display_name,avatar:(user.display_name||user.username||"用")[0],meta:therapist?"康复治疗师 · 本机数据库":"患者 · 本机数据库"};
+  return {...user,name:user.display_name,avatar:(user.display_name||user.username||"用")[0],meta:therapist?"康复治疗师":"患者"};
 }
 
 async function syncPatientData(){
@@ -182,8 +182,8 @@ const demoUsers = [
   {key:"linyuqing",name:"林雨晴",account:"p.linyuqing",password:"linyu123",role:"patient"},
   {key:"zhouqiming",name:"周启明",account:"p.zhouqiming",password:"zhou123",role:"patient"},
   {key:"wu",name:"吴女士",account:"p.wu",password:"wu123",role:"patient"},
-  {key:"patient",name:"张先生",account:"p.zhang",password:"zhang123",role:"patient",avatar:"张",meta:"患者 · 本机数据库"},
-  {key:"therapist",name:"林康复师",account:"dr.lin",password:"lin123",role:"therapist",avatar:"林",meta:"康复治疗师 · 本机数据库"}
+  {key:"patient",name:"张先生",account:"p.zhang",password:"zhang123",role:"patient",avatar:"张",meta:"患者"},
+  {key:"therapist",name:"林康复师",account:"dr.lin",password:"lin123",role:"therapist",avatar:"林",meta:"康复治疗师"}
 ];
 // Retire the old mock accounts, which stored passwords only in this browser.
 try{localStorage.removeItem("kangshifu_registered_users")}catch(error){}
@@ -253,12 +253,13 @@ function updateDurationEstimates(){
   $("#today-remaining").textContent=!availableExercises().length?"添加动作后显示预计时间":remaining?`未完成项目预计还需${estimateMinutes(remaining)}`:"今日训练已完成";
   $("#completed-count").textContent=availableExercises().filter(ex=>ex.done).length;
   $("#exercise-total").textContent=availableExercises().length;
-  $("#training-list-title").textContent=availableExercises().length?`${availableExercises().length}项训练`:"尚未添加训练动作";
+  $("#training-list-title").textContent=availableExercises().length?`今天的训练 · ${availableExercises().length} 个动作`:"尚未添加训练动作";
   $("#today-progress").style.width=`${availableExercises().filter(ex=>ex.done).length/Math.max(1,availableExercises().length)*100}%`;
 }
 
 function renderExercises(){
-  $("#exercise-list").innerHTML = availableExercises().map((ex,i) => `<article class="exercise-row ${ex.done ? "done" : ""}"><span class="exercise-index">0${i+1}</span><div class="exercise-thumb"><img src="${ex.image}" alt="${ex.name}示范"></div><div class="exercise-info"><h4>${ex.name}</h4><p>${ex.flow}</p><div class="exercise-meta"><span>当前 ${ex.groups} 组 × ${ex.reps} 次</span><span data-duration="${ex.id}"></span></div></div><div class="exercise-config"><div class="dose-editor"><b>自主训练量</b><label>组数<input type="number" min="1" max="20" step="1" value="${ex.groups}" data-dose-field="groups" data-exercise-id="${ex.id}" aria-label="${ex.name}训练组数"></label><label>每组次数<input type="number" min="1" max="100" step="1" value="${ex.reps}" data-dose-field="reps" data-exercise-id="${ex.id}" aria-label="${ex.name}每组次数"></label><small>${patientTrainingSource==="prescribed"?"康复师建议":patientTrainingSource==="demo"?"演示设置":"自主设置（待康复师确认）"}：${ex.dose}</small></div></div><div class="exercise-action"><button class="${ex.done ? "secondary-button" : "primary-button"}" data-train="${ex.id}">${ex.done ? "再次训练" : "开始训练"}</button>${ex.done ? "<small>今日已完成</small>" : ""}</div></article>`).join("");
+  const nextIndex=availableExercises().findIndex(ex=>!ex.done);
+  $("#exercise-list").innerHTML = availableExercises().map((ex,i) => `<article class="exercise-card ${ex.done ? "done" : ""}"><button class="exercise-thumb" type="button" data-train="${ex.id}" aria-label="开始训练：${ex.name}"><img src="${ex.image}" alt="${ex.name}示范"><span class="thumb-badge ${!ex.done&&i===nextIndex?"next":""}">${ex.done?"今日已完成":i===nextIndex?"下一个":""}</span><span class="thumb-duration" data-duration="${ex.id}"></span>${ex.done?'<i class="thumb-progress"></i>':""}</button><div class="exercise-body"><span class="exercise-index">0${i+1}</span><div class="exercise-info"><h4>${ex.name}</h4><p class="exercise-meta"><span>${ex.groups} 组 × ${ex.reps} 次</span></p><p class="exercise-flow">${ex.flow}</p></div></div><div class="exercise-action"><button class="${ex.done ? "secondary-button" : "primary-button"}" data-train="${ex.id}">${ex.done ? "再练一次" : "开始训练"}</button><details class="exercise-config"><summary>调整训练量</summary><div class="dose-editor"><b>自主训练量</b><label>组数<input type="number" min="1" max="20" step="1" value="${ex.groups}" data-dose-field="groups" data-exercise-id="${ex.id}" aria-label="${ex.name}训练组数"></label><label>每组次数<input type="number" min="1" max="100" step="1" value="${ex.reps}" data-dose-field="reps" data-exercise-id="${ex.id}" aria-label="${ex.name}每组次数"></label><small>${patientTrainingSource==="prescribed"?"康复师建议":patientTrainingSource==="demo"?"演示设置":"自主设置（待康复师确认）"}：${ex.dose}</small></div></details></div></article>`).join("");
   $("#patient-plan-rows").innerHTML = availableExercises().map((ex,i)=>`<div class="plain-row"><span>0${i+1}</span><b>${ex.name}</b><p>${ex.dose} · ${estimateMinutes(estimateExerciseSeconds(ex,ex.recommendedGroups,ex.recommendedReps))}</p><p>${escapeHtml(targetDescription(ex))}</p></div>`).join("");
   if(!availableExercises().length){
     const empty='<div class="content-section"><h3>还没有训练方案</h3><p>可以先关联康复师，或自主添加膝骨关节炎训练方向与动作。自主选择不代表诊断。</p><button class="primary-button" data-add-selection>添加病症与动作</button> <button class="secondary-button" data-goto="care-connections">关联康复师</button></div>';
@@ -343,13 +344,13 @@ function renderFeedback(index=feedbackSelection){
   $("#feedback-sets").innerHTML="";$("#feedback-events").innerHTML="";
   if(!brief){
     $("#feedback-status").textContent="暂无记录";$("#feedback-source").textContent="尚无本账号的训练结果";
-    $("#feedback-hero").innerHTML="<strong>完成一次训练后查看真实反馈</strong><p>开始识别并结束训练后，这里会显示本次测量值、分组总结和调整提示。尚未接入的历史录像不会自动补入。</p>";
+    $("#feedback-hero").innerHTML="<strong>完成一次训练后查看真实反馈</strong><p>开始识别并结束训练后，这里会显示本次测量值、分组总结和调整提示。</p><button class='primary-button' data-goto='patient-home'>去今日训练</button>";
     $("#feedback-metrics").innerHTML="";$("#therapist-note").textContent="暂无基于实际动作的建议。";return;
   }
   const problems=brief.sets.some(g=>g.problems?.length),review=brief.interrupted_attempts||brief.sets.some(g=>g.needs_review_reps);
   $("#feedback-status").textContent=!brief.completed_reps?"未识别完整动作":problems?"有待调整项":review?"部分数据需复核":"已生成反馈";
   $("#feedback-status").className=`status ${problems||review?"warn":"neutral"}`;
-  $("#feedback-source").textContent=`最近一次训练 · ${new Date(record.savedAt).toLocaleString("zh-CN")} · ${brief.side} · ${record.serverId?"已保存到账号":"本机反馈，等待保存到账号"}`;
+  $("#feedback-source").textContent=`最近一次训练 · ${new Date(record.savedAt).toLocaleString("zh-CN")} · ${brief.side} · ${record.serverId?"已保存到账号":"本次结果还没保存到账号"}`;
   $("#feedback-hero").innerHTML=`<strong>识别完成 ${brief.completed_reps} / 计划 ${brief.target_reps} 次</strong><p>${escapeHtml(brief.scope)}</p>`;
   $("#feedback-metrics").innerHTML=record.metrics.map(m=>`<div class="metric-row"><span>${escapeHtml(m[0])}</span><b>${escapeHtml(m[1])}</b><small>${escapeHtml(m[2])}</small><span class="metric-result neutral">实际记录</span></div>`).join("");
   $("#feedback-sets").innerHTML=brief.sets.map(g=>`<section class="report-set"><h3>第 ${g.set} 组 · ${escapeHtml(g.status)}</h3><p>识别 ${g.completed_reps} / ${g.target_reps} 次，${g.angle_hold_met_reps} 次${ex.id==="squat"?"完成本次微蹲目标":"达到角度与保持目标"}。</p><p>${escapeHtml(g.finding)}</p>${g.needs_review_reps?`<p>${g.needs_review_reps} 次需复核，缺失测量未当成正常。</p>`:""}</section>`).join("");
@@ -438,7 +439,7 @@ function enterApp(user){
   loadFeedbackReports(user.id);
   $("#login-screen").classList.add("hidden"); $("#register-screen").classList.add("hidden"); $("#app-shell").classList.remove("hidden");
   const therapist=user.role==="therapist";
-  $("#patient-nav").classList.toggle("hidden",therapist); $("#therapist-nav").classList.toggle("hidden",!therapist);
+  $("#patient-nav").classList.toggle("hidden",therapist); $("#therapist-nav").classList.toggle("hidden",!therapist); $("#patient-tabbar").classList.toggle("hidden",therapist);
   $("#profile-avatar").textContent=user.avatar; $("#profile-name").textContent=user.name; $("#profile-meta").textContent=user.meta;
   $("#patient-greeting").textContent=`${user.name}的今日训练`;
   {const d=new Date();$("#patient-date").textContent=`${d.getMonth()+1}月${d.getDate()}日 · 周${"日一二三四五六"[d.getDay()]}`;}
@@ -460,7 +461,7 @@ function gotoPage(page){
 function openTraining(id){
   const ex=availableExercises().find(x=>x.id===id); if(!ex)return; activeExercise=ex;
   const i=exercises.indexOf(ex); $("#training-kicker").textContent=`动作 0${i+1}`; $("#training-title").textContent=ex.name; $("#training-image").src=ex.image;
-  $("#phase-name").textContent="准备"; $("#live-cue").textContent="请调整位置并保持训练侧髋、膝、踝入镜"; $("#live-cue-detail").textContent=ex.flow;
+  $(".camera-state").innerHTML="<i></i>摄像头未开启"; $("#phase-name").textContent="准备"; $("#live-cue").textContent="请调整位置并保持训练侧髋、膝、踝入镜"; $("#live-cue-detail").textContent=ex.flow;
   $("#live-metrics").innerHTML=ex.live.map(m=>`<div class="live-metric"><span>${m[0]}</span><b>--</b><small>${m[0]==="本组次数"?`/ ${ex.reps}`:m[2]}</small></div>`).join("");
   $("#cue-log").innerHTML=`<li><time>准备</time><p>${ex.note}</p></li>`; $("#start-training").textContent="允许摄像头并开始识别"; $("#start-training").disabled=false; clearTimeout(trainingTimer);
   $("#training-screen").classList.add("active"); $("#training-screen").setAttribute("aria-hidden","false"); document.body.classList.add("training-open");
@@ -482,7 +483,7 @@ async function visionApi(path,body){
 async function rawVisionApi(path,body){
   const response=await fetch(`${VISION_BASE}${path}`,{method:"POST",headers:visionHeaders({"Content-Type":"application/json"}),body:JSON.stringify(body||{}),signal:AbortSignal.timeout(15000)});
   const payload=await response.json().catch(()=>({error:`HTTP ${response.status}`}));
-  if(!response.ok){const error=new Error(payload.error||payload.detail||`视觉服务错误（${response.status}）`);error.status=response.status;throw error}
+  if(!response.ok){const error=new Error(payload.error||payload.detail||`识别服务出错（${response.status}）`);error.status=response.status;throw error}
   return payload;
 }
 
@@ -493,9 +494,9 @@ function expireVisionSession(){
   cameraStream?.getTracks().forEach(track=>track.stop());cameraStream=null;
   $("#training-video").srcObject=null;$(".camera-stage").classList.remove("live");
   const canvas=$("#pose-overlay");canvas.getContext("2d").clearRect(0,0,canvas.width,canvas.height);
-  $(".camera-state").textContent="识别连接已结束";
+  $(".camera-state").innerHTML="<i></i>识别已结束";
   $("#live-cue").textContent="请重新开始识别";
-  $("#live-cue-detail").textContent="服务重启或会话已结束。点击下方按钮重新标定；这不是动作不合规。本次尚未保存的识别结果无法恢复。";
+  $("#live-cue-detail").textContent="识别中断了，点下方按钮重新开始。这不是你的动作有问题。本次还没保存的结果无法恢复。";
   $("#phase-name").textContent="等待重新开始";
   $("#start-training").disabled=false;$("#start-training").textContent="重新开始识别";
 }
@@ -662,7 +663,7 @@ async function captureLandmarksLoop(){
     LANDMARK_QUEUE.push({landmarks:detected.landmarks||[],pose_status:detected.pose_status,width,height,timestamp_s});
     // 丢最旧的而不是最新的：规则层要求时间戳递增，丢掉已经排在前面的帧不影响后续判定。
     while(LANDMARK_QUEUE.length>MAX_QUEUE)LANDMARK_QUEUE.shift();
-    $(".camera-state").textContent=`浏览器识别 · ${Math.round(performance.now()-frameStart)} ms/帧`;
+    $(".camera-state").innerHTML="<i></i>正在识别";$(".camera-state").title=`浏览器识别 · ${Math.round(performance.now()-frameStart)} ms/帧`;
     uploadLandmarksLoop();
   }catch(error){
     if(generation===cameraRequestGeneration&&trainingRunning){$("#live-cue").textContent="识别暂时中断";$("#live-cue-detail").textContent=error.message}
@@ -723,7 +724,7 @@ async function sendCameraFrame(){
       const sample={encode_ms:encodeEnd-encodeStart,request_ms:received-encodeEnd,server_ms:result.processing_ms,render_ms:performance.now()-received,total_ms:performance.now()-frameStart};
       const samples=window.__posePerformance ||= [];samples.push(sample);if(samples.length>120)samples.shift();
       $(".camera-state").title=`编码 ${Math.round(sample.encode_ms)} ms；请求 ${Math.round(sample.request_ms)} ms（含服务处理 ${sample.server_ms??"未知"} ms）；绘制 ${Math.round(sample.render_ms)} ms`;
-      $(".camera-state").textContent=`${result.backend} · ${Math.round(performance.now()-frameStart)} ms/帧`;
+      $(".camera-state").innerHTML="<i></i>正在识别";$(".camera-state").dataset.perf=`${result.backend} · ${Math.round(performance.now()-frameStart)} ms/帧`;
       if(result.training_progress?.status==="completed")await stopLiveTraining();
     }
   }catch(error){if(generation===cameraRequestGeneration&&trainingRunning&&error.status===404){expireVisionSession();return}retryDelay=500;if(generation===cameraRequestGeneration&&trainingRunning){$("#pose-overlay").getContext("2d").clearRect(0,0,$("#pose-overlay").width,$("#pose-overlay").height);$("#live-cue").textContent="识别暂时中断";$("#live-cue-detail").textContent=error.message}}
@@ -769,7 +770,7 @@ async function startLiveTraining(){
     const video=$("#training-video");video.srcObject=cameraStream;await video.play();
     const started=await visionApi("/start",{backend:VISION_MODE==="browser"?"browser":"rtmpose",required_reference:VISION_MODE==="remote"?RTM_REFERENCE:undefined,rule_version:activeExercise.id==="supine"?"slr_v0.1_surface":activeExercise.id==="stand"?"sts_v0.1_dual_baseline":activeExercise.id==="squat"?"squat_v0.1_joint":null,exercise:EXERCISE_TO_VISION[activeExercise.id],side:$("#training-side").value,sets:activeExercise.groups,reps:activeExercise.reps,targets:activeExercise.targets||defaultTargets(activeExercise.id)});
     if(requestGeneration!==cameraRequestGeneration){await visionApi(`/${started.session_id}/stop`,{});return}
-    trainingOwner={userId:currentUser.id,exerciseId:activeExercise.id,clientId:started.session_id};captureStart=performance.now();visionSessionId=started.session_id;trainingRunning=true;startTrainingVideo(trainingOwner);$(".camera-stage").classList.add("live");$(".camera-state").innerHTML="<i></i>视觉算法已连接";button.disabled=false;button.textContent="结束本次训练";sendVisionFrame();
+    trainingOwner={userId:currentUser.id,exerciseId:activeExercise.id,clientId:started.session_id};captureStart=performance.now();visionSessionId=started.session_id;trainingRunning=true;startTrainingVideo(trainingOwner);$(".camera-stage").classList.add("live");$(".camera-state").innerHTML="<i></i>识别已连接";button.disabled=false;button.textContent="结束本次训练";sendVisionFrame();
   }catch(error){cameraStream?.getTracks().forEach(track=>track.stop());cameraStream=null;button.disabled=false;button.textContent="重新允许摄像头";$("#live-cue").textContent="无法开始识别";$("#live-cue-detail").textContent=cameraErrorText(error)}
 }
 
@@ -889,6 +890,7 @@ document.addEventListener("click",async event=>{
   if(event.target.closest("#publish-plan"))await persistVisualPlan("published");
   if(event.target.closest("#logout")){closeTrainingPlayback();await closeTraining();clearInterval(reportPoll);try{await api("/auth/logout",{method:"POST"})}catch(error){}apiToken="";sessionStorage.removeItem("kangshifu_api_token");await closeTraining();if($("#message-dialog").open)$("#message-dialog").close();$("#training-report-dialog").close();lastTrainingReport=null;$("#view-last-report").hidden=true;currentUser=null;$("#app-shell").classList.add("hidden");showAuthScreen("login");$("#login-form").reset();setRole("login","patient");$("#login-error").textContent=""}
   if(event.target.closest("#mobile-menu"))$(".sidebar").classList.toggle("mobile-open");
+  if(event.target.closest(".sidebar-backdrop"))$(".sidebar").classList.remove("mobile-open");
 });
 
 $("#login-form").addEventListener("submit",async event=>{
@@ -905,8 +907,8 @@ $("#login-form").addEventListener("submit",async event=>{
     }
     apiToken=result.token;sessionStorage.setItem("kangshifu_api_token",apiToken);
     $("#login-error").textContent="";$("#login-password").value="";enterApp(apiUser(result.user));
-    try{await syncBackendData();showToast("登录成功，已连接数据库")}catch(error){showToast(`已登录，工作台数据暂未加载：${error.message}`)}
-  }catch(error){if(error.code==="PASSWORD_RESET_REQUIRED")openPasswordReset(account);apiToken="";sessionStorage.removeItem("kangshifu_api_token");$("#login-error").textContent=error instanceof TypeError?"无法连接账号服务，请检查服务是否启动或网络连接。":error.status===401?"账号或密码不正确。旧版仅在浏览器保存的账号，请先重新注册。":error.message}
+    try{await syncBackendData();showToast("登录成功")}catch(error){showToast(`已登录，工作台数据暂未加载：${error.message}`)}
+  }catch(error){if(error.code==="PASSWORD_RESET_REQUIRED")openPasswordReset(account);apiToken="";sessionStorage.removeItem("kangshifu_api_token");$("#login-error").textContent=error instanceof TypeError?"暂时连不上服务器，请检查网络后重试。":error.status===401?"账号或密码不正确。旧版仅在浏览器保存的账号，请先重新注册。":error.message}
   finally{button.disabled=false}
 });
 
@@ -922,8 +924,8 @@ $("#register-form").addEventListener("submit",async event=>{
   $("#register-error").textContent="正在创建账号…";
   try{
     const result=await api("/auth/register",{method:"POST",auth:false,body:{username:identifier,password,display_name:name,role:selectedRegisterRole}});
-    $("#register-error").textContent="";$("#register-form").reset();setRole("register","patient");setRole("login",result.role);showAuthScreen("login");$("#login-account").value=result.username;$("#login-password").value="";$("#login-error").textContent="注册成功，请输入密码登录。";showToast("账号已保存到数据库");
-  }catch(error){$("#register-error").textContent=error instanceof TypeError?"无法连接账号服务，请检查服务是否启动或网络连接。":error.message}
+    $("#register-error").textContent="";$("#register-form").reset();setRole("register","patient");setRole("login",result.role);showAuthScreen("login");$("#login-account").value=result.username;$("#login-password").value="";$("#login-error").textContent="注册成功，请输入密码登录。";showToast("注册成功");
+  }catch(error){$("#register-error").textContent=error instanceof TypeError?"暂时连不上服务器，请检查网络后重试。":error.message}
   finally{button.disabled=false}
 });
 
@@ -940,7 +942,7 @@ document.addEventListener("input",event=>{
   const doseField=event.target.closest("[data-dose-field]");if(!doseField||doseField.value==="")return;
   const ex=exercises.find(item=>item.id===doseField.dataset.exerciseId);if(!ex)return;
   const limit=doseField.dataset.doseField==="groups"?20:100;ex[doseField.dataset.doseField]=Math.max(1,Math.min(limit,Math.round(Number(doseField.value)||1)));
-  const summary=doseField.closest(".exercise-row")?.querySelector(".exercise-meta span");if(summary)summary.textContent=`当前 ${ex.groups} 组 × ${ex.reps} 次`;ex.done=false;saveDosePreferences();updateDurationEstimates();
+  const summary=doseField.closest(".exercise-card")?.querySelector(".exercise-meta span");if(summary)summary.textContent=`${ex.groups} 组 × ${ex.reps} 次`;ex.done=false;saveDosePreferences();updateDurationEstimates();
 });
 document.addEventListener("change",event=>{
   const doseField=event.target.closest("[data-dose-field]");
@@ -971,7 +973,7 @@ $("#reselect-subject").addEventListener("click",async()=>{
 
 function showTrainingReport(result){
   const report=result?.brief_report;
-  if(!report){showToast("本次结果没有简报，请刷新页面并重启视觉服务");return}
+  if(!report){showToast("本次没有生成训练简报，请刷新页面后重试");return}
   $("#report-overview").textContent=`${report.exercise} · ${report.side}：识别完成 ${report.completed_reps} / 计划 ${report.target_reps} 次`;
   $("#report-sets").innerHTML=report.sets.map(row=>`<section class="report-set"><h3>第 ${row.set} 组 · ${escapeHtml(row.status)}</h3><p>识别完成 ${row.completed_reps} / ${row.target_reps} 次；其中 ${row.angle_hold_met_reps} 次${result.training_session?.rule_version==="squat_v0.1_joint"?"完成本次微蹲目标":"达到角度与保持目标"}。</p><p>${escapeHtml(row.finding)}</p>${row.needs_review_reps?`<small>${row.needs_review_reps} 次动作有部分指标无法判断，需复核。</small>`:""}</section>`).join("");
   if(Number.isFinite(report.attempted_reps)){
@@ -1053,8 +1055,8 @@ async function loadServerReports(){
   try{
     const selectedPatient=isPatient?null:reportPatientFilter;
     const data=await api("/training-reports"+(selectedPatient?`?patient_id=${selectedPatient.id}`:""));if(currentUser?.id!==uid||(!isPatient&&selectedPatient!==reportPatientFilter))return;
-    $("#"+target+"-report-status").textContent=`${selectedPatient?selectedPatient.name+" · ":""}已加载最近50份训练报告`;
-    $("#"+target+"-report-list").innerHTML=data.reports.length?data.reports.map(row=>`<section class="report-set"><h3>${escapeHtml(row.patient_name)} · ${escapeHtml(row.brief_report.exercise)}</h3><p>${escapeHtml(row.created_at)} · ${escapeHtml(row.brief_report.side)} · 识别 ${row.brief_report.completed_reps}/${row.brief_report.target_reps} 次</p><p>${escapeHtml(isPatient?(row.delivery.status==="available"?(row.read_at?"康复师已查看":"已同步给关联康复师，尚未查看"):"已保存，尚未关联康复师"):(row.read_at?"已查看":"未查看"))}</p><button class="secondary-button" data-open-report="${row.id}">查看报告</button> ${videoReportButton(row)}</section>`).join(""):"<p>暂无已保存的训练报告。</p>";
+    $("#"+target+"-report-status").textContent=data.reports.length?`${selectedPatient?selectedPatient.name+" · ":""}共 ${data.reports.length} 份训练报告${data.reports.length>=50?"（显示最近 50 份）":""}`:"";
+    $("#"+target+"-report-list").innerHTML=data.reports.length?data.reports.map(row=>`<section class="report-set"><h3>${escapeHtml(row.patient_name)} · ${escapeHtml(row.brief_report.exercise)}</h3><p>${escapeHtml(row.created_at)} · ${escapeHtml(row.brief_report.side)} · 识别 ${row.brief_report.completed_reps}/${row.brief_report.target_reps} 次</p><p>${escapeHtml(isPatient?(row.delivery.status==="available"?(row.read_at?"康复师已查看":"已同步给关联康复师，尚未查看"):"已保存，尚未关联康复师"):(row.read_at?"已查看":"未查看"))}</p><button class="secondary-button" data-open-report="${row.id}">查看报告</button> ${videoReportButton(row)}</section>`).join(""):(isPatient?"<div class='report-empty'><p>还没有训练报告。练完一次，报告会自动出现在这里。</p><button class='primary-button' data-goto='patient-home'>去今日训练</button></div>":"<div class='report-empty'><p>关联的患者还没有训练报告。</p></div>");
     if(!isPatient){if(!selectedPatient)$("#report-unread-count").textContent=data.reports.filter(r=>!r.read_at).length||"";return}
     const pending=pendingReports(uid);
     for(const [id,result] of Object.entries(pending)){
@@ -1065,7 +1067,7 @@ async function loadServerReports(){
     const details=await Promise.all([...latest.values()].map(row=>api(`/training-reports/${row.id}`)));
     if(currentUser?.id!==uid)return;
     details.forEach(rememberServerFeedback);
-  }catch(error){if(currentUser?.id===uid){$("#"+target+"-report-status").textContent=`报告加载失败：${error.message}。本机已有反馈仍保留，可点击刷新重试。`;$("#"+target+"-report-list").innerHTML=""}}
+  }catch(error){if(currentUser?.id===uid){$("#"+target+"-report-status").textContent=`报告加载失败：${error.message}。已有的反馈不会丢，可以点刷新重试。`;$("#"+target+"-report-list").innerHTML=""}}
   finally{reportsLoading=false;if(reportsReloadRequested){reportsReloadRequested=false;queueMicrotask(loadServerReports)}}
 }
 async function openSavedReport(id){
@@ -1140,7 +1142,7 @@ async function uploadTrainingVideo(row){
   const uid=currentUser?.id,key=videoKey(uid,row.client_id),entry=pendingVideoFiles.get(key);if(!entry||videoUploads.has(key))return;
   videoUploads.add(key);const status=$("#report-video-actions");status.textContent="正在保存训练视频…";
   try{
-    if(entry.incomplete)throw Error("录制过程中发生错误，录像可能不完整，已保留本机暂存") ;
+    if(entry.incomplete)throw Error("录制过程中发生错误，录像可能不完整，已先保存在这台设备上") ;
     if(!entry.sha256){const hash=await crypto.subtle.digest("SHA-256",await entry.blob.arrayBuffer());entry.sha256=Array.from(new Uint8Array(hash),x=>x.toString(16).padStart(2,"0")).join("");await videoStore("put",key,entry).catch(()=>{})}
     const base=`/training-reports/${row.id}/video`;
     const v=await api(base,{method:"POST",body:{mime:entry.blob.type,size:entry.blob.size,sha256:entry.sha256,duration_s:entry.duration_s,preview_flipped:entry.preview_flipped}});
@@ -1174,7 +1176,7 @@ async function playTrainingVideo(id){
       $("#video-playback-status").textContent=`视频加载中 ${Math.round((i+1)/video.chunk_count*100)}%`;
     }
     playbackUrl=URL.createObjectURL(new Blob(blocks,{type:video.mime}));const player=$("#saved-training-video");player.src=playbackUrl;player.style.transform=video.preview_flipped?"scaleX(-1)":"none";
-    $("#video-playback-status").textContent=`已从数据库加载，时长约 ${Math.round(video.duration_s)} 秒。点击播放查看。`;
+    $("#video-playback-status").textContent=`已加载，时长约 ${Math.round(video.duration_s)} 秒。点击播放查看。`;
   }catch(error){if(generation===playbackGeneration)$("#video-playback-status").textContent=error.message}
 }
 document.addEventListener("click",async event=>{
@@ -1299,7 +1301,7 @@ function startRemoteFrames(){
     if(captureCanvas.width!==img.naturalWidth)captureCanvas.width=img.naturalWidth;if(captureCanvas.height!==img.naturalHeight)captureCanvas.height=img.naturalHeight;captureCanvas.getContext("2d").drawImage(img,0,0);
     updateLiveResult(result);
     const age=Math.max(0,(performance.now()-captureStart)/1000-frame.timestamp_s);
-    $(".camera-state").textContent=`RTMPose · 已识别画面 · 延迟 ${age.toFixed(1)}秒`;
+    $(".camera-state").innerHTML=`<i></i>正在识别 · 延迟 ${age.toFixed(1)} 秒`;
     if(remoteFrames.dropped)$("#live-cue-detail").textContent+=" · 已跳过拥塞画面，次数仅含已识别部分";
   },error=>{
     if(generation!==cameraRequestGeneration||!trainingRunning)return;
