@@ -179,8 +179,8 @@ input:focus,select:focus,textarea:focus{outline:0;border-color:var(--brand);box-
 .dose-editor small{grid-column:1/-1;color:var(--muted);font-size:12px}
 .exercise-card.done .exercise-info h4{color:var(--muted)}
 
-/* 电脑端首页：一屏装下，不滚动（像 App 主屏）；窗口太矮时才退回可滚动 */
-@media (min-width:1025px) and (min-height:600px){
+/* 电脑与平板首页：一屏装下，不滚动（像 App 主屏）；窗口太矮时才退回可滚动 */
+@media (min-width:761px) and (min-height:600px){
   #patient-home.active-page{display:flex;flex-direction:column;height:calc(100dvh - var(--top));padding-bottom:20px;overflow:hidden}
   #patient-home>.page-heading,#patient-home>.today-strip,#patient-home>.section-title,#patient-home>#edit-training-selection{flex:0 0 auto}
   #patient-home>.page-heading{margin:4px 0 14px}
