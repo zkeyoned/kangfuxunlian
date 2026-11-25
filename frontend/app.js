@@ -109,7 +109,8 @@ async function syncVisualPlan(){
 const $ = selector => document.querySelector(selector);
 const $$ = selector => [...document.querySelectorAll(selector)];
 const API_BASE = ["localhost","127.0.0.1","[::1]",""].includes(location.hostname)?"http://127.0.0.1:8801/api/v1":"/api/v1";
-// local: 本机RTMPose；remote: 公网同源RTMPose（默认）；browser: MediaPipe仅显式对照。
+// local: 本机RTMPose；browser: 浏览器内 MediaPipe（公网默认）；remote: 公网同源RTMPose（网址加 ?vision=remote 才用）。
+//   remote  —— 画面以 JPEG 上传服务器识别，路远或网慢时会明显延迟，且服务器同时只能扛很少的人。
 //   local   —— 识别跑在用户自己电脑上的 Python 服务（8802），画面以 JPEG 上传。
 //              需要先在本机装好并启动视觉服务，Safari 与手机用不了。
 //   browser —— 识别跑在浏览器里，只把 33 个关键点发给服务端跑规则。
@@ -120,7 +121,7 @@ const IS_LOCAL_HOST = ["localhost", "127.0.0.1", "[::1]", ""].includes(location.
 const VISION_MODE = (() => {
   const forced = new URLSearchParams(location.search).get("vision");
   if (["local","browser","remote"].includes(forced)) return forced;
-  return IS_LOCAL_HOST ? "local" : "remote";
+  return IS_LOCAL_HOST ? "local" : "browser";
 })();
 // 本机打开页面时，两种模式都直连 8802：本地没有 /vision 这条反向代理路由，
 // 而且本地页面本身是 http，不存在 https 访问本机 http 的限制。
