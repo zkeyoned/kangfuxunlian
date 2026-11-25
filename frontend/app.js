@@ -582,6 +582,32 @@ function ensurePoseWorker(){
   return poseWorkerReady;
 }
 
+// 首次使用前先由页面自己把识别模型文件下载一遍，这样能显示真实进度；
+// 下完后浏览器缓存里已有这些文件，识别模块随后加载几乎不再等待。下载失败不拦截，交给识别模块自己再试。
+const POSE_ASSETS=[["pose_landmarker_full.task",9398198],["wasm/vision_wasm_internal.wasm",11756954],["wasm/vision_wasm_internal.js",323377],["vision_bundle.js",155465]];
+async function prefetchPoseAssets(onProgress){
+  const root=new URL("vendor/mediapipe/",location.href).href,loaded=POSE_ASSETS.map(()=>0),sizes=POSE_ASSETS.map(a=>a[1]);
+  const report=()=>onProgress(loaded.reduce((a,b)=>a+b,0),sizes.reduce((a,b)=>a+b,0));
+  await Promise.all(POSE_ASSETS.map(async([file],i)=>{
+    const response=await fetch(root+file);if(!response.ok)throw new Error(`下载失败（${response.status}）`);
+    sizes[i]=Number(response.headers.get("content-length"))||sizes[i];
+    if(!response.body){loaded[i]=sizes[i];report();return}
+    const reader=response.body.getReader();
+    for(;;){const {done,value}=await reader.read();if(done)break;loaded[i]+=value.length;report()}
+    loaded[i]=sizes[i];report();
+  }));
+}
+function showModelProgress(state,done=0,total=1){
+  const box=$("#model-progress");if(!box)return;
+  if(state==="hide"){box.hidden=true;return}
+  box.hidden=false;
+  const pct=state==="init"?100:Math.min(100,Math.round(done/Math.max(1,total)*100));
+  $("#model-progress-fill").style.width=pct+"%";box.setAttribute("aria-valuenow",String(pct));
+  $("#model-progress-title").textContent=state==="init"?"正在启动识别模型":"正在下载识别模型";
+  $("#model-progress-text").textContent=state==="init"?"马上就好…":`${pct}% · ${(done/1048576).toFixed(1)} / ${(total/1048576).toFixed(1)} MB`;
+  $("#start-training").textContent=state==="init"?"正在启动识别模型…":`正在下载识别模型 ${pct}%`;
+}
+
 function releasePoseWorker(){
   poseWaiters.clear();
   if(poseWorker){poseWorker.terminate();poseWorker=null;poseWorkerReady=null}
@@ -762,7 +788,12 @@ async function startLiveTraining(){
       button.textContent="正在准备识别模型…";
       $("#live-cue").textContent="正在准备识别模型";
       $("#live-cue-detail").textContent="首次使用需要下载约 20MB 的识别模型，之后会被浏览器缓存。";
-      await ensurePoseWorker();
+      if(!poseWorkerReady){
+        showModelProgress("download",0,1);
+        await prefetchPoseAssets((done,total)=>{if(requestGeneration===cameraRequestGeneration)showModelProgress("download",done,total)}).catch(()=>{});
+        if(requestGeneration===cameraRequestGeneration)showModelProgress("init");
+      }
+      try{await ensurePoseWorker()}finally{showModelProgress("hide")}
       button.textContent="正在启动摄像头…";
     }
     const requestedStream=await navigator.mediaDevices.getUserMedia({video:{width:{ideal:1280},height:{ideal:720}},audio:false});

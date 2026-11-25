@@ -498,6 +498,13 @@ body.training-open{overflow:hidden}
 .live-cue strong{display:block;font-size:clamp(24px,3.2vw,44px);font-weight:700;line-height:1.25;letter-spacing:.02em}
 .live-cue p{margin-top:4px;color:#FFD2B3;font-size:clamp(13px,1.3vw,17px)}
 .live-cue p:empty{display:none}
+.model-progress{position:absolute;left:50%;top:50%;z-index:5;transform:translate(-50%,-50%);width:min(440px,86%);padding:22px 24px;border-radius:20px;background:rgba(14,17,22,.86);color:#fff;text-align:center;box-shadow:0 20px 60px rgba(0,0,0,.35)}
+.model-progress strong{display:block;font-size:20px}
+.model-progress__bar{height:10px;margin:16px 0 10px;border-radius:5px;background:rgba(255,255,255,.18);overflow:hidden}
+.model-progress__bar i{display:block;width:0;height:100%;border-radius:5px;background:var(--ok-live);transition:width .2s linear}
+.model-progress p{font:600 15px/1.4 var(--num)}
+.model-progress small{display:block;margin-top:6px;color:rgba(255,255,255,.65);font-size:12px}
+.model-progress:not([hidden])~.live-cue{display:none}
 .training-controls{display:flex;flex-wrap:wrap;align-items:center;gap:8px;margin-top:12px}
 .training-controls #start-training{width:auto;min-width:240px;min-height:44px;border-radius:22px}
 .training-controls .capture-options{display:flex;flex-wrap:wrap;margin:0}
