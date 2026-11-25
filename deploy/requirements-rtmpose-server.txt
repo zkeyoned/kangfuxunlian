@@ -1,0 +1,6 @@
+# Match the measured local reference. Do not substitute MediaPipe or a lite model.
+numpy==2.5.3
+opencv-contrib-python==5.0.0.93
+onnxruntime==1.30.0
+tqdm==4.70.1
+# Install rtmlib==0.0.16 separately with --no-deps to avoid duplicate cv2 wheels.

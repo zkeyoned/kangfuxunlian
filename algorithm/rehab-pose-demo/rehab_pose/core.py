@@ -95,8 +95,9 @@ class Analyzer:
 
     Completeness and configured target comparisons are separate. No medical score.
     """
-    def __init__(self, config=None):
+    def __init__(self, config=None, *, seated=False):
         self.config=config or Config()
+        self.seated=seated
         self.state="waiting_for_rest"
         self.last_t=None
         self.smooth=None
@@ -188,17 +189,17 @@ class Analyzer:
                 if r["target_reached"] and r["hold_start"] is not None:
                     if a>=c.target_deg-c.hysteresis_deg:r["max_hold_s"]=max(r["max_hold_s"],t-r["hold_start"])
                     else:r["hold_start"]=None
-                if r["max_deg"]-a>=c.reversal_deg:
+                if r["max_deg"]-a>=c.reversal_deg and not (self.seated and r["target_reached"] and a>=c.target_deg-c.hysteresis_deg):
                     if r["reversal_start"] is None:r["reversal_start"]=t
                     if t-r["reversal_start"]>=c.reversal_dwell_s:
                         self.state="returning";r["return_start"]=r["reversal_start"];r["return_min"]=a
                 else:r["reversal_start"]=None
             if self.state=="returning":
                 r["return_min"]=a if r["return_min"] is None else min(r["return_min"],a)
-                if c.reversal_dwell_s and a-r["return_min"]>=c.reversal_deg:
+                if c.reversal_dwell_s and a-r["return_min"]>=c.reversal_deg and not (self.seated and a<=c.rest_max_deg):
                     self.state="holding" if r["target_reached"] and a>=c.target_deg-c.hysteresis_deg else "extending"
                     r["reversal_start"]=None;r["return_start"]=None;r["return_min"]=None;r["rest_start"]=None
-                elif not c.rest_min_deg<=a<=c.rest_max_deg:
+                elif not (0 if self.seated else c.rest_min_deg)<=a<=c.rest_max_deg:
                     r["rest_start"]=None
                 else:
                     if r["rest_start"] is None:

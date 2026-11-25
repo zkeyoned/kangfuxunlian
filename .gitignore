@@ -9,6 +9,7 @@ data/
 __pycache__/
 *.pyc
 .venv/
+.vision-venv/
 
 # 前端依赖
 node_modules/

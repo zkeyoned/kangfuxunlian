@@ -7,7 +7,7 @@ import math
 class TrainingPlan:
     sets: int = 3
     reps_per_set: int = 10
-    hold_s: float = 2.
+    hold_s: float = 3.
     rest_s: float = 30.
 
     def __post_init__(self):
