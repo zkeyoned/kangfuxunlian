@@ -69,6 +69,9 @@ async def access_log(request: Request, call_next):
     t0 = time.perf_counter()
     resp = await call_next(request)
     ms = (time.perf_counter() - t0) * 1000
+    # 识别模型和 wasm 共约 21 MB、内容很少变：让浏览器和 CDN 缓存 7 天，第二次打开不用再下载。
+    if request.url.path.startswith("/vendor/") and resp.status_code == 200:
+        resp.headers["Cache-Control"] = "public, max-age=604800"
     if request.url.path.startswith("/api/") or request.url.path == "/healthz":
         log.info("%s %s %s %.1fms ip=%s", request.method, request.url.path, resp.status_code, ms, request.client.host if request.client else "-")
     return resp
